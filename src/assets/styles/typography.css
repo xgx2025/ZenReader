@@ -1,0 +1,194 @@
+/* .zen-prose — the reading surface. Hand-rolled for full control over the
+   paper/ink feel; not @tailwindcss/typography. */
+
+.zen-prose {
+  font-family: var(--reader-font-family, var(--font-serif));
+  font-size: var(--reader-font-size, 1.0625rem);
+  line-height: var(--reader-line-height, 1.95);
+  color: var(--ink);
+  max-width: var(--reader-text-width, 42rem);
+  margin: 0 auto;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  transition: color var(--motion-base) var(--ease-zen);
+}
+
+.zen-prose > *:first-child {
+  margin-top: 0;
+}
+
+.zen-prose h1,
+.zen-prose h2,
+.zen-prose h3,
+.zen-prose h4,
+.zen-prose h5,
+.zen-prose h6 {
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  margin: 2.1em 0 0.9em;
+  scroll-margin-top: 3rem;
+}
+
+.zen-prose h1 {
+  font-size: 1.85em;
+  margin-top: 0;
+}
+.zen-prose h2 {
+  font-size: 1.5em;
+}
+.zen-prose h3 {
+  font-size: 1.25em;
+}
+.zen-prose h4 {
+  font-size: 1.1em;
+}
+.zen-prose h5,
+.zen-prose h6 {
+  font-size: 1em;
+  color: var(--ink-soft);
+}
+
+.zen-prose p {
+  margin: 0 0 1.4em;
+}
+
+.zen-prose a {
+  color: var(--bamboo);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--bamboo) 38%, transparent);
+  transition: border-color var(--motion-fast) var(--ease-zen);
+}
+.zen-prose a:hover {
+  border-bottom-color: var(--bamboo);
+}
+
+.zen-prose strong {
+  font-weight: 700;
+}
+
+.zen-prose blockquote {
+  margin: 1.6em 0;
+  padding: 0.15em 0 0.15em 1.3em;
+  border-left: 3px solid var(--bamboo);
+  color: var(--ink-soft);
+}
+
+.zen-prose ul,
+.zen-prose ol {
+  margin: 0 0 1.4em;
+  padding-left: 1.7em;
+}
+.zen-prose li {
+  margin: 0.4em 0;
+}
+.zen-prose li::marker {
+  color: var(--sandal);
+}
+
+/* GFM task list (markdown-it-task-lists) */
+.zen-prose li.task-list-item {
+  list-style: none;
+  margin-left: -1.2em;
+}
+.zen-prose .task-list-item input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--bamboo);
+}
+
+.zen-prose code {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono",
+    monospace;
+  font-size: 0.86em;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.zen-prose pre {
+  margin: 1.6em 0;
+  padding: 1.2em 1.4em;
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-x: auto;
+  transition: background-color var(--motion-base) var(--ease-zen);
+}
+.zen-prose pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.85em;
+  line-height: 1.65;
+}
+.zen-prose pre code .line {
+  display: block;
+}
+
+.zen-prose table {
+  margin: 1.6em 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95em;
+  font-family: var(--font-sans);
+}
+.zen-prose th,
+.zen-prose td {
+  border: 1px solid var(--line);
+  padding: 0.5em 0.9em;
+  text-align: left;
+}
+.zen-prose th {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-weight: 600;
+}
+
+.zen-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 1.6em auto;
+  display: block;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.zen-prose hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 2.5em 0;
+}
+
+.zen-prose .header-anchor {
+  display: none;
+}
+
+/* Footnotes (markdown-it-footnote) */
+.zen-prose .footnote-ref {
+  font-size: 0.8em;
+  vertical-align: super;
+  color: var(--bamboo);
+  margin-left: 0.15em;
+}
+.zen-prose .footnotes {
+  margin-top: 3em;
+  font-size: 0.9em;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--line);
+  padding-top: 1.5em;
+}
+.zen-prose .footnotes li::marker {
+  color: var(--sandal);
+}
+
+/* Highlight (觉悟划线) */
+.zen-prose mark.hl {
+  background: color-mix(in srgb, var(--sandal) 22%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.05em 0.1em;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-zen);
+}
+.zen-prose mark.hl:hover,
+.zen-prose mark.hl.active {
+  background: color-mix(in srgb, var(--sandal) 38%, transparent);
+}

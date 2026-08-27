@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/* Theme tokens — defined per theme, consumed by @theme inline below.
+   ZenReader never uses pure #000 / #fff. */
+:root {
+  --paper: #f7f2e9;
+  --paper-deep: #efe6d3;
+  --ink: #2b2a27;
+  --ink-soft: #5a574f;
+  --bamboo: #5f7a5c;
+  --sandal: #8a6f5b;
+  --dusk: #9aa0a6;
+  --line: rgba(43, 42, 39, 0.12);
+}
+
+[data-theme="sepia"] {
+  --paper: #f4ecd8;
+  --paper-deep: #eadfc3;
+  --ink: #3b3229;
+  --ink-soft: #6b5f50;
+  --bamboo: #5f7a5c;
+  --sandal: #9a7a5b;
+  --dusk: #b3a68e;
+  --line: rgba(59, 50, 41, 0.14);
+}
+
+[data-theme="dark"] {
+  --paper: #1f1e1b;
+  --paper-deep: #292721;
+  --ink: #d6cfbe;
+  --ink-soft: #9a9384;
+  --bamboo: #7d9a78;
+  --sandal: #b09a7d;
+  --dusk: #56524a;
+  --line: rgba(214, 207, 190, 0.12);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-bamboo: var(--bamboo);
+  --color-sandal: var(--sandal);
+  --color-dusk: var(--dusk);
+  --color-line: var(--line);
+
+  --font-serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun",
+    serif;
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  --ease-zen: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-slow: 600ms;
+  --motion-base: 400ms;
+  --motion-fast: 200ms;
+}
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background-color var(--motion-base) var(--ease-zen),
+      color var(--motion-base) var(--ease-zen);
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--bamboo) 24%, transparent);
+  }
+
+  /* Accessible, zen focus ring. */
+  :focus-visible {
+    outline: 2px solid var(--bamboo);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}

@@ -1,0 +1,34 @@
+/* Motion primitives — slow, low-distance, ink-wash feel. */
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--motion-base) var(--ease-zen);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity var(--motion-base) var(--ease-zen),
+    transform var(--motion-base) var(--ease-zen);
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+@keyframes zen-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.zen-breathe {
+  animation: zen-breathe 4s var(--ease-zen) infinite;
+}

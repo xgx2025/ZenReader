@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+coverage
+*.log
+
+# 设计文档，不入库
+doc/
