@@ -5,14 +5,25 @@ import { useDropZone } from '@vueuse/core'
 import ZIcon from '@/components/common/ZIcon.vue'
 
 import { useFileImport } from '@/composables/useFileImport'
+import { isTauri } from '@/lib/native'
 import { COPY } from '@/lib/copy'
 import type { ImportResult } from '@/types/import'
 
-const { items, importing, importFiles } = useFileImport()
+const {
+  items,
+  importing,
+  lastImportedDocs,
+  importFiles,
+  importFromVault,
+  saveToFolder,
+} = useFileImport()
+
+const inTauri = isTauri()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
 const result = ref<ImportResult | null>(null)
+const savedInfo = ref<{ dir: string; saved: number } | null>(null)
 
 const dropzoneEl = ref<HTMLElement | null>(null)
 const { isOverDropZone } = useDropZone(dropzoneEl, {
@@ -23,9 +34,25 @@ const { isOverDropZone } = useDropZone(dropzoneEl, {
 
 function run(files: File[]) {
   result.value = null
+  savedInfo.value = null
   importFiles(files).then((r) => {
     result.value = r
   })
+}
+
+async function onPickFolder() {
+  result.value = null
+  savedInfo.value = null
+  if (inTauri) {
+    result.value = await importFromVault()
+  } else {
+    folderInput.value?.click()
+  }
+}
+
+async function onSaveToFolder() {
+  const r = await saveToFolder()
+  if (r.dir) savedInfo.value = { dir: r.dir, saved: r.saved }
 }
 
 function onFileChange(e: Event) {
@@ -65,9 +92,7 @@ const STATUS_CLASS: Record<string, string> = {
 
 <template>
   <div class="min-h-screen bg-paper text-ink">
-    <header
-      class="flex items-center gap-3 border-b border-line px-6 py-4"
-    >
+    <header class="flex items-center gap-3 border-b border-line px-6 py-4">
       <button
         class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
         @click="$router.push('/')"
@@ -106,7 +131,7 @@ const STATUS_CLASS: Record<string, string> = {
         </button>
         <button
           class="flex flex-1 items-center justify-center gap-2 rounded-full border border-line bg-paper-deep/60 px-4 py-2.5 text-sm text-ink transition-colors hover:border-bamboo"
-          @click="folderInput?.click()"
+          @click="onPickFolder"
         >
           <ZIcon name="folder" :size="16" />
           {{ COPY.importFolderAction }}
@@ -156,13 +181,24 @@ const STATUS_CLASS: Record<string, string> = {
           {{ COPY.importDone }} {{ result.imported }} · {{ COPY.importSkipped }}
           {{ result.skipped }}
         </p>
-        <div class="mt-4 flex justify-center gap-3">
+
+        <div class="mt-4 flex flex-wrap justify-center gap-3">
           <RouterLink
             to="/"
             class="rounded-full bg-bamboo px-5 py-2 text-sm text-paper transition-opacity hover:opacity-90"
           >
             {{ COPY.library }}
           </RouterLink>
+
+          <button
+            v-if="inTauri && lastImportedDocs.length > 0 && !savedInfo"
+            class="flex items-center gap-2 rounded-full border border-bamboo px-5 py-2 text-sm text-bamboo transition-colors hover:bg-bamboo/10"
+            @click="onSaveToFolder"
+          >
+            <ZIcon name="folder" :size="15" />
+            保存到文件夹
+          </button>
+
           <button
             v-if="!importing"
             class="rounded-full border border-line px-5 py-2 text-sm text-ink-soft transition-colors hover:text-ink"
@@ -171,6 +207,10 @@ const STATUS_CLASS: Record<string, string> = {
             继续引卷
           </button>
         </div>
+
+        <p v-if="savedInfo" class="mt-3 text-xs text-bamboo">
+          已保存 {{ savedInfo.saved }} 篇到 {{ savedInfo.dir }}
+        </p>
       </div>
     </main>
   </div>
