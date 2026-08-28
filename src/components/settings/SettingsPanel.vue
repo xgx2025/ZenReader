@@ -8,6 +8,7 @@ import type {
   ThemeName,
   ReaderSettings,
   PaperTextureLevel,
+  ReminderAction,
 } from '@/types/settings'
 
 defineProps<{ open: boolean }>()
@@ -66,6 +67,26 @@ async function pickVaultFolder() {
   if (!inTauri) return
   const dir = await nativeFs.pickFolder()
   if (dir) settings.setVaultPath(dir)
+}
+
+const ACTIONS: { key: ReminderAction; label: string }[] = [
+  { key: 'stretch', label: COPY.actStretch },
+  { key: 'water', label: COPY.actWater },
+  { key: 'eyes', label: COPY.actEyes },
+  { key: 'breathe', label: COPY.actBreathe },
+]
+
+function onReminderInterval(e: Event) {
+  const value = Number((e.target as HTMLInputElement).value)
+  settings.updateReminder({ intervalMinutes: value })
+}
+
+function toggleAction(action: ReminderAction) {
+  const cur = settings.reminder.actions
+  const next = cur.includes(action)
+    ? cur.filter((a) => a !== action)
+    : [...cur, action]
+  settings.updateReminder({ actions: next })
 }
 </script>
 
@@ -178,6 +199,106 @@ async function pickVaultFolder() {
                 @click="settings.update({ fontFamily: f.key })"
               >
                 {{ f.label }}
+              </button>
+            </div>
+          </section>
+
+          <!-- 禅钟 -->
+          <section class="border-b border-line px-5 py-4">
+            <h3 class="text-xs font-medium tracking-wide text-dusk">
+              {{ COPY.zenClock }}
+            </h3>
+
+            <div class="mt-3 flex items-center justify-between">
+              <span class="text-xs text-ink-soft">{{ COPY.reminderEnable }}</span>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="settings.reminder.enabled"
+                class="relative h-5 w-9 rounded-full border transition-colors duration-200"
+                :class="
+                  settings.reminder.enabled
+                    ? 'border-bamboo bg-bamboo/25'
+                    : 'border-line bg-paper-deep'
+                "
+                @click="settings.updateReminder({ enabled: !settings.reminder.enabled })"
+              >
+                <span
+                  class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                  :class="
+                    settings.reminder.enabled
+                      ? 'left-[1.15rem] bg-bamboo'
+                      : 'left-0.5 bg-dusk'
+                  "
+                />
+              </button>
+            </div>
+
+            <div class="mt-4">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-ink-soft">{{ COPY.reminderInterval }}</span>
+                <span class="tabular-nums text-dusk">
+                  {{ settings.reminder.intervalMinutes }}
+                  {{ COPY.reminderIntervalUnit }}
+                </span>
+              </div>
+              <input
+                type="range"
+                class="mt-2 w-full accent-bamboo"
+                min="5"
+                max="120"
+                step="5"
+                :value="settings.reminder.intervalMinutes"
+                @input="onReminderInterval"
+              />
+            </div>
+
+            <div class="mt-4">
+              <p class="text-xs text-ink-soft">{{ COPY.reminderActions }}</p>
+              <div class="mt-2 flex gap-2">
+                <button
+                  v-for="a in ACTIONS"
+                  :key="a.key"
+                  class="flex-1 rounded-full border px-2 py-1.5 text-xs transition-colors"
+                  :class="
+                    settings.reminder.actions.includes(a.key)
+                      ? 'border-bamboo bg-bamboo/15 text-ink'
+                      : 'border-line text-ink-soft hover:border-bamboo'
+                  "
+                  @click="toggleAction(a.key)"
+                >
+                  {{ a.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <div>
+                <span class="text-xs text-ink-soft">{{ COPY.reminderPreHint }}</span>
+                <p class="mt-0.5 text-[11px] leading-snug text-dusk">
+                  {{ COPY.reminderPreHintHint }}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="settings.reminder.preHint"
+                class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
+                :class="
+                  settings.reminder.preHint
+                    ? 'border-bamboo bg-bamboo/25'
+                    : 'border-line bg-paper-deep'
+                "
+                @click="settings.updateReminder({ preHint: !settings.reminder.preHint })"
+              >
+                <span
+                  class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                  :class="
+                    settings.reminder.preHint
+                      ? 'left-[1.15rem] bg-bamboo'
+                      : 'left-0.5 bg-dusk'
+                  "
+                />
               </button>
             </div>
           </section>

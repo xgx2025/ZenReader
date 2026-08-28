@@ -79,6 +79,29 @@ export const COPY = {
   moveTo: '移到分组',
   moveToRoot: '根目录',
   moreActions: '更多操作',
+
+  // 禅钟（歇息提醒）
+  zenClock: '禅钟',
+  reminderEnable: '开启',
+  reminderInterval: '香长',
+  reminderIntervalUnit: '分钟',
+  reminderActions: '歇息之道',
+  reminderPreHint: '燃香预提示',
+  reminderPreHintHint: '香将尽时，香形由淡转显；关掉则燃香全程保持极淡',
+  incenseGone: '一炷香已尽',
+  igniteHint: '点香 · 开始计时',
+  litNotice: '香已点燃',
+  burned: '已燃',
+  breakStretch: '起身，散散步',
+  breakWater: '饮口水',
+  breakEyes: '望向远处，二十息',
+  breakBreathe: '闭目，静静',
+  breakKnow: '知晓',
+  actStretch: '散行',
+  actWater: '饮水',
+  actEyes: '望远',
+  actBreathe: '静息',
+  remaining: '还剩',
 } as const
 
 export type CopyKey = keyof typeof COPY

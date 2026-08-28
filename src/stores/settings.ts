@@ -4,6 +4,7 @@ import { nativeFs, isTauri } from '@/lib/native'
 import {
   DEFAULT_SETTINGS,
   type ReaderSettings,
+  type ReminderSettings,
   type ThemeName,
 } from '@/types/settings'
 
@@ -107,6 +108,12 @@ export const useSettingsStore = defineStore('settings', {
     update(patch: Partial<ReaderSettings>) {
       Object.assign(this, patch)
       this.applyAll()
+      this.persist()
+    },
+
+    /** 更新禅钟提醒配置（不影响主题/排版，仅持久化）。 */
+    updateReminder(patch: Partial<ReminderSettings>) {
+      this.reminder = { ...this.reminder, ...patch }
       this.persist()
     },
   },

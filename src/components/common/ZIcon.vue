@@ -21,6 +21,12 @@ export type IconName =
   | 'expand'
   | 'shrink'
   | 'more'
+  | 'bell'
+  | 'incense'
+  | 'droplet'
+  | 'eye'
+  | 'breath'
+  | 'figure'
 
 const props = withDefaults(
   defineProps<{ name: IconName; size?: number; strokeWidth?: number }>(),
@@ -55,6 +61,12 @@ const ICONS: Record<IconName, string> = {
   expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
   shrink: '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
   more: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  incense: '<path d="M12 20V8"/><path d="M12 8c.6-.9.6-1.8 0-2.6"/><path d="M9 20h6"/>',
+  droplet: '<path d="M12 4C12 4 7 10 7 14a5 5 0 0 0 10 0c0-4-5-10-5-10z"/>',
+  eye: '<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
+  breath: '<path d="M12.5 6.5A2.2 2.2 0 1 1 10.5 10H3"/><path d="M12.5 14.5A2.2 2.2 0 1 0 10.5 18.5H3"/>',
+  figure: '<circle cx="12" cy="5" r="2"/><path d="M12 9v11"/><path d="M12 12l-4 2.5"/><path d="M12 12l4 2.5"/>',
 }
 
 const path = computed(() => ICONS[props.name] ?? '')
