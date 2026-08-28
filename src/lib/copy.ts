@@ -49,6 +49,8 @@ export const COPY = {
   fontSize: '字号',
   lineHeight: '行距',
   textWidth: '页宽',
+  paragraphIndent: '段首缩进',
+  justify: '两端对齐',
   reading: '阅读',
   vaultFolder: '书库目录',
   chooseFolder: '选择文件夹',

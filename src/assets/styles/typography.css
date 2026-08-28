@@ -17,6 +17,24 @@
   margin-top: 0;
 }
 
+/* 段首缩进 - classic Chinese book setting: indent all paragraphs and tighten
+   the rhythm so it reads like print, not web. */
+.zen-prose[data-indent="true"] p {
+  text-indent: 2em;
+  margin-bottom: 0.75em;
+}
+/* Lists / blockquotes keep their own rhythm - no indent. */
+.zen-prose[data-indent="true"] li > p,
+.zen-prose[data-indent="true"] blockquote p {
+  text-indent: 0;
+  margin-bottom: 1.4em;
+}
+
+/* 两端对齐 - flush right margin for CJK prose. */
+.zen-prose[data-justify="true"] p {
+  text-align: justify;
+}
+
 .zen-prose h1,
 .zen-prose h2,
 .zen-prose h3,

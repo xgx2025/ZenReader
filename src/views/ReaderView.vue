@@ -19,6 +19,7 @@ import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
 import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
+import { useReadingScroll } from '@/composables/useReadingScroll'
 import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
@@ -53,11 +54,31 @@ const structure = computed(() =>
   doc.value ? extractStructure(doc.value.html) : { toc: [], hasCodeBlocks: false },
 )
 const toc = computed(() => structure.value.toc)
+const headingIds = computed(() => toc.value.map((t) => t.id))
+const {
+  containerRef,
+  activeHeadingId,
+  toolbarHidden,
+  scrollByFraction,
+  scrollToHeading: scrollToHeadingEl,
+} = useReadingScroll(headingIds)
 const anchors = computed<AppliedAnchor[]>(() =>
   notesStore.notes.map((n) => ({ noteId: n.id, anchor: n.anchor })),
 )
 
 const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
+
+// TOC anchors by heading id, so the active one can be kept in view.
+const tocItemEls = new Map<string, HTMLElement>()
+function setTocItemRef(id: string, el: unknown) {
+  if (el instanceof HTMLElement) tocItemEls.set(id, el)
+  else tocItemEls.delete(id)
+}
+
+watch(activeHeadingId, (id) => {
+  if (!id || !showToc.value) return
+  tocItemEls.get(id)?.scrollIntoView({ block: 'nearest' })
+})
 
 function renderProse() {
   const el = proseEl.value
@@ -78,6 +99,12 @@ async function loadDocument() {
   await notesStore.load(relPath)
   await nextTick()
   renderProse()
+  // Same component instance is reused across documents - reset the surface.
+  if (containerRef.value) {
+    containerRef.value.scrollTop = 0
+    activeHeadingId.value = ''
+    toolbarHidden.value = false
+  }
 }
 
 function makeNote(anchor: HighlightAnchor, note: string, kind: Note['kind']): Note {
@@ -153,7 +180,92 @@ function toggleFontFamily() {
 }
 
 function scrollToHeading(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  scrollToHeadingEl(id)
+}
+
+/** Jump to the previous/next heading relative to the reader's position. */
+function jumpChapter(dir: 1 | -1) {
+  const ids = headingIds.value
+  if (ids.length === 0) return
+  const current = activeHeadingId.value
+  let index = current ? ids.indexOf(current) : -1
+  index = Math.min(ids.length - 1, Math.max(0, index + dir))
+  // Already on the last/first heading - nudge to the document's end/start.
+  if (
+    (dir === 1 && current === ids[ids.length - 1]) ||
+    (dir === -1 && current === '')
+  ) {
+    const el = containerRef.value
+    if (el) {
+      el.scrollTo({
+        top: dir === 1 ? el.scrollHeight : 0,
+        behavior: 'smooth',
+      })
+    }
+    return
+  }
+  scrollToHeading(ids[index])
+}
+
+/** True when keystrokes would land in a text field - skip shortcuts. */
+function isTypingTarget(e: KeyboardEvent): boolean {
+  const t = e.target
+  if (!(t instanceof HTMLElement)) return false
+  return (
+    t.tagName === 'INPUT' ||
+    t.tagName === 'TEXTAREA' ||
+    t.tagName === 'SELECT' ||
+    t.isContentEditable
+  )
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return
+  if (isTypingTarget(e)) return
+
+  switch (e.key) {
+    case 'Escape':
+      if (composerOpen.value) {
+        composerOpen.value = false
+      } else if (settings.zenMode) {
+        settings.setZenMode(false)
+      } else if (showNotes.value) {
+        showNotes.value = false
+      } else if (showToc.value) {
+        showToc.value = false
+      }
+      return
+    case 'j':
+    case 'ArrowDown':
+      scrollByFraction(0.8)
+      return
+    case 'k':
+    case 'ArrowUp':
+      scrollByFraction(-0.8)
+      return
+    case ' ':
+      e.preventDefault() // keep the page itself from scrolling
+      scrollByFraction(e.shiftKey ? -0.9 : 0.9)
+      return
+    case 'ArrowRight':
+      jumpChapter(1)
+      return
+    case 'ArrowLeft':
+      jumpChapter(-1)
+      return
+    case 't':
+    case 'T':
+      showToc.value = !showToc.value
+      return
+    case 'n':
+    case 'N':
+      showNotes.value = !showNotes.value
+      return
+    case 'z':
+    case 'Z':
+      settings.setZenMode(!settings.zenMode)
+      return
+  }
 }
 
 async function onMoveTo(path: string) {
@@ -175,19 +287,6 @@ watch(
   },
 )
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Escape') return
-  if (composerOpen.value) {
-    composerOpen.value = false
-  } else if (settings.zenMode) {
-    settings.setZenMode(false)
-  } else if (showNotes.value) {
-    showNotes.value = false
-  } else if (showToc.value) {
-    showToc.value = false
-  }
-}
-
 onMounted(() => {
   loadDocument()
   window.addEventListener('keydown', onKeydown)
@@ -202,10 +301,11 @@ watch(() => route.params.path, loadDocument)
 
 <template>
   <div class="flex h-screen flex-col bg-paper text-ink">
-    <!-- Top toolbar (hidden in 禅境) -->
+    <!-- Top toolbar (hidden in 禅境; tucks away while scrolling down) -->
     <header
       v-if="!settings.zenMode"
-      class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2.5"
+      class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2.5 transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
+      :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
     >
       <div class="flex min-w-0 items-center gap-1">
         <button
@@ -317,8 +417,14 @@ watch(() => route.params.path, loadDocument)
             <a
               v-for="item in toc"
               :key="item.id"
+              :ref="(el) => setTocItemRef(item.id, el)"
               :href="`#${item.id}`"
-              class="block truncate rounded-md px-2.5 py-1.5 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+              class="block truncate rounded-md px-2.5 py-1.5 text-sm transition-colors"
+              :class="
+                activeHeadingId === item.id
+                  ? 'bg-bamboo/10 text-bamboo'
+                  : 'text-ink-soft hover:bg-bamboo/10 hover:text-ink'
+              "
               :style="{ paddingLeft: `${(item.level - 1) * 12 + 10}px` }"
               @click.prevent="scrollToHeading(item.id)"
             >
@@ -329,7 +435,7 @@ watch(() => route.params.path, loadDocument)
       </Transition>
 
       <!-- Reading surface -->
-      <div class="min-w-0 flex-1 overflow-y-auto">
+      <div ref="containerRef" class="min-w-0 flex-1 overflow-y-auto">
         <div
           class="px-6 py-10 md:px-12"
           :class="{ 'py-16': settings.zenMode }"
@@ -337,6 +443,8 @@ watch(() => route.params.path, loadDocument)
           <article
             ref="proseEl"
             class="zen-prose"
+            :data-indent="settings.paragraphIndent ? 'true' : 'false'"
+            :data-justify="settings.justify ? 'true' : 'false'"
             @click="onProseClick"
           ></article>
         </div>

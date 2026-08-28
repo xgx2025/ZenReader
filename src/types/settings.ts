@@ -10,6 +10,10 @@ export interface ReaderSettings {
   /** Max text column width, in rem. */
   textWidth: number
   fontFamily: ReaderFont
+  /** 段首缩进 - classic Chinese book indentation (2em). */
+  paragraphIndent: boolean
+  /** 两端对齐 - flush margins for CJK prose. */
+  justify: boolean
   zenMode: boolean
   /** The vault folder (书库目录) on disk; empty string = no vault open. */
   vaultPath: string
@@ -21,6 +25,8 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   lineHeight: 1.95,
   textWidth: 42,
   fontFamily: 'serif',
+  paragraphIndent: false,
+  justify: false,
   zenMode: false,
   vaultPath: '',
 }

@@ -28,6 +28,13 @@ const RANGES = [
   { key: 'textWidth', label: COPY.textWidth, min: 28, max: 60, step: 1 },
 ] as const
 
+const TOGGLES = [
+  { key: 'paragraphIndent', label: COPY.paragraphIndent },
+  { key: 'justify', label: COPY.justify },
+] as const
+
+type ToggleKey = (typeof TOGGLES)[number]['key']
+
 type RangeKey = (typeof RANGES)[number]['key']
 
 function rangeValue(key: RangeKey): number {
@@ -37,6 +44,10 @@ function rangeValue(key: RangeKey): number {
 function onRange(e: Event, key: RangeKey) {
   const value = Number((e.target as HTMLInputElement).value)
   settings.update({ [key]: value } as Partial<ReaderSettings>)
+}
+
+function onToggle(key: ToggleKey) {
+  settings.update({ [key]: !settings[key] } as Partial<ReaderSettings>)
 }
 
 async function pickVaultFolder() {
@@ -163,6 +174,34 @@ async function pickVaultFolder() {
                   :value="rangeValue(r.key)"
                   @input="onRange($event, r.key)"
                 />
+              </div>
+              <div
+                v-for="tg in TOGGLES"
+                :key="tg.key"
+                class="flex items-center justify-between"
+              >
+                <span class="text-xs text-ink-soft">{{ tg.label }}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  :aria-checked="settings[tg.key]"
+                  class="relative h-5 w-9 rounded-full border transition-colors duration-200"
+                  :class="
+                    settings[tg.key]
+                      ? 'border-bamboo bg-bamboo/25'
+                      : 'border-line bg-paper-deep'
+                  "
+                  @click="onToggle(tg.key)"
+                >
+                  <span
+                    class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                    :class="
+                      settings[tg.key]
+                        ? 'left-[1.15rem] bg-bamboo'
+                        : 'left-0.5 bg-dusk'
+                    "
+                  />
+                </button>
               </div>
             </div>
           </section>
