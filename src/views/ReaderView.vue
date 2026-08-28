@@ -10,7 +10,6 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
-import MoveDialog from '@/components/library/MoveDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
@@ -24,7 +23,6 @@ import { useFullscreen } from '@/composables/useFullscreen'
 import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
-import { useLibraryStore } from '@/stores/library'
 import { useProgressStore } from '@/stores/progress'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { COPY } from '@/lib/copy'
@@ -37,7 +35,6 @@ const router = useRouter()
 const reader = useReaderStore()
 const notesStore = useNotesStore()
 const settings = useSettingsStore()
-const library = useLibraryStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen()
@@ -47,7 +44,6 @@ const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
 
 const showToc = ref(false)
 const showNotes = ref(false)
-const moveOpen = ref(false)
 const activeNoteId = ref<string | null>(null)
 
 const composerOpen = ref(false)
@@ -315,16 +311,6 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-async function onMoveTo(path: string) {
-  if (!doc.value) return
-  const fileName = doc.value.fileName
-  const to = path ? `${path}/${fileName}` : fileName
-  moveOpen.value = false
-  if (to === doc.value.relativePath) return // already there — no-op
-  await library.moveDocument(doc.value.relativePath, to)
-  router.replace('/')
-}
-
 watch(
   () => settings.theme,
   () => {
@@ -422,14 +408,6 @@ watch(() => route.params.path, loadDocument)
           @click="openPanel"
         >
           <ZIcon name="settings" :size="18" />
-        </button>
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.moveTo"
-          @click="moveOpen = true"
-        >
-          <ZIcon name="folder" :size="17" />
         </button>
 
         <span class="mx-1 h-5 w-px bg-line" />
@@ -574,12 +552,5 @@ watch(() => route.params.path, loadDocument)
       @cancel="composerOpen = false"
     />
 
-    <MoveDialog
-      :open="moveOpen"
-      :folders="library.flatFolders"
-      :current-path="doc?.folderPath ?? ''"
-      @select="onMoveTo"
-      @close="moveOpen = false"
-    />
   </div>
 </template>

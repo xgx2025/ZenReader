@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 
 import { nativeFs } from '@/lib/native'
-import { vaultFile, folderPathFromRelative } from '@/lib/vault'
+import { joinPath, vaultFile, folderPathFromRelative } from '@/lib/vault'
 import { useSettingsStore } from '@/stores/settings'
 import { useLibraryStore } from '@/stores/library'
 import type { ImportItem, ImportResult } from '@/types/import'
@@ -38,14 +38,17 @@ export function useFileImport() {
   const items = ref<ImportItem[]>([])
   const importing = ref(false)
 
-  async function importFiles(files: File[]): Promise<ImportResult> {
+  async function importFiles(
+    files: File[],
+    targetFolder = '',
+  ): Promise<ImportResult> {
     const typed = files as (File & { webkitRelativePath?: string })[]
     const mdFiles = typed.filter((f) => /\.md$/i.test(f.name))
     const skippedByExtension = typed.length - mdFiles.length
 
     const existing = new Set(library.files.map((f) => f.relativePath))
     const entries = mdFiles.map((file) => {
-      const relPath = relativePathFor(file)
+      const relPath = joinPath(targetFolder, relativePathFor(file))
       return { file, relPath, folderPath: folderPathFromRelative(relPath) }
     })
 

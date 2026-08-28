@@ -11,6 +11,8 @@ import type { VaultFile } from '@/types/document'
 
 const props = defineProps<{ file: VaultFile; meta?: IndexedMeta }>()
 
+const emit = defineEmits<{ menu: [file: VaultFile, x: number, y: number] }>()
+
 const progressStore = useProgressStore()
 
 const title = computed(() => props.meta?.title ?? titleFromName(props.file.name))
@@ -33,51 +35,64 @@ const finished = computed(() => {
 </script>
 
 <template>
-  <RouterLink
-    :to="`/read/${encodeURIComponent(file.relativePath)}`"
-    class="group block rounded-lg border border-line bg-paper-deep/50 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:border-bamboo/40 hover:shadow-[0_8px_24px_rgba(0,0,0,0.05)]"
-    :class="{ 'border-bamboo/30': reading }"
+  <div
+    class="group relative"
+    @contextmenu.prevent="emit('menu', file, $event.clientX, $event.clientY)"
   >
-    <div class="flex items-start justify-between gap-2">
-      <h3 class="font-serif text-lg leading-snug text-ink line-clamp-2">
-        {{ title }}
-      </h3>
-      <span
-        v-if="finished"
-        class="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-bamboo/10 px-2 py-0.5 text-[11px] text-bamboo"
-      >
-        <ZIcon name="bookmark" :size="11" />
-        {{ COPY.finished }}
-      </span>
-    </div>
-
-    <p
-      v-if="meta?.excerpt"
-      class="mt-2 text-sm leading-relaxed text-ink-soft line-clamp-3"
+    <RouterLink
+      :to="`/read/${encodeURIComponent(file.relativePath)}`"
+      class="block rounded-lg border border-line bg-paper-deep/50 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:border-bamboo/40 hover:shadow-[0_8px_24px_rgba(0,0,0,0.05)]"
+      :class="{ 'border-bamboo/30': reading }"
     >
-      {{ meta.excerpt }}
-    </p>
-
-    <!-- 在读 progress -->
-    <div v-if="reading" class="mt-3 flex items-center gap-2">
-      <div class="h-0.5 flex-1 overflow-hidden rounded-full bg-line">
-        <div
-          class="h-full rounded-full bg-bamboo/70"
-          :style="{ width: `${Math.round(reading.ratio * 100)}%` }"
-        />
+      <div class="flex items-start justify-between gap-2">
+        <h3 class="font-serif text-lg leading-snug text-ink line-clamp-2">
+          {{ title }}
+        </h3>
+        <span
+          v-if="finished"
+          class="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-bamboo/10 px-2 py-0.5 text-[11px] text-bamboo"
+        >
+          <ZIcon name="bookmark" :size="11" />
+          {{ COPY.finished }}
+        </span>
       </div>
-      <span class="shrink-0 text-[11px] tabular-nums text-bamboo">
-        {{ COPY.readingProgress }} {{ Math.round(reading.ratio * 100) }}%
-      </span>
-    </div>
 
-    <div class="mt-4 flex items-center gap-3 text-xs text-ink-soft">
-      <span v-if="folderPath" class="truncate text-sandal">{{ folderPath }}</span>
-      <template v-if="meta">
-        <span>{{ meta.wordCount }} 字</span>
-        <span>{{ meta.readingTime }} 分</span>
-      </template>
-      <span v-if="mtime" class="ml-auto shrink-0 text-dusk">{{ mtime }}</span>
-    </div>
-  </RouterLink>
+      <p
+        v-if="meta?.excerpt"
+        class="mt-2 text-sm leading-relaxed text-ink-soft line-clamp-3"
+      >
+        {{ meta.excerpt }}
+      </p>
+
+      <!-- 在读 progress -->
+      <div v-if="reading" class="mt-3 flex items-center gap-2">
+        <div class="h-0.5 flex-1 overflow-hidden rounded-full bg-line">
+          <div
+            class="h-full rounded-full bg-bamboo/70"
+            :style="{ width: `${Math.round(reading.ratio * 100)}%` }"
+          />
+        </div>
+        <span class="shrink-0 text-[11px] tabular-nums text-bamboo">
+          {{ COPY.readingProgress }} {{ Math.round(reading.ratio * 100) }}%
+        </span>
+      </div>
+
+      <div class="mt-4 flex items-center gap-3 text-xs text-ink-soft">
+        <span v-if="folderPath" class="truncate text-sandal">{{ folderPath }}</span>
+        <template v-if="meta">
+          <span>{{ meta.wordCount }} 字</span>
+          <span>{{ meta.readingTime }} 分</span>
+        </template>
+        <span v-if="mtime" class="ml-auto shrink-0 text-dusk">{{ mtime }}</span>
+      </div>
+    </RouterLink>
+
+    <button
+      class="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-ink-soft opacity-0 transition-opacity duration-200 hover:bg-bamboo/10 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+      :title="COPY.moreActions"
+      @click.prevent.stop="emit('menu', file, $event.clientX, $event.clientY)"
+    >
+      <ZIcon name="more" :size="16" />
+    </button>
+  </div>
 </template>

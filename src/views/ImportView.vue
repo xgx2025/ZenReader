@@ -15,6 +15,8 @@ const library = useLibraryStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
 const result = ref<ImportResult | null>(null)
+/** Destination 分组 within the vault; empty string = root. */
+const targetFolder = ref('')
 
 const dropzoneEl = ref<HTMLElement | null>(null)
 const { isOverDropZone } = useDropZone(dropzoneEl, {
@@ -25,7 +27,7 @@ const { isOverDropZone } = useDropZone(dropzoneEl, {
 
 function run(files: File[]) {
   result.value = null
-  importFiles(files).then((r) => {
+  importFiles(files, targetFolder.value).then((r) => {
     result.value = r
   })
 }
@@ -97,6 +99,26 @@ const STATUS_CLASS: Record<string, string> = {
       </div>
 
       <template v-else>
+        <div
+          class="mb-4 flex items-center gap-3 rounded-xl border border-line bg-paper-deep/40 px-4 py-3"
+        >
+          <ZIcon name="folder" :size="16" class="shrink-0 text-sandal" />
+          <label class="shrink-0 text-sm text-ink-soft">{{ COPY.importTo }}</label>
+          <select
+            v-model="targetFolder"
+            class="min-w-0 flex-1 cursor-pointer rounded-full border border-line bg-paper px-3 py-1.5 text-sm text-ink outline-none transition-colors focus:border-bamboo"
+          >
+            <option value="">{{ COPY.moveToRoot }}</option>
+            <option
+              v-for="f in library.flatFolders"
+              :key="f"
+              :value="f"
+            >
+              {{ f }}
+            </option>
+          </select>
+        </div>
+
         <div
           ref="dropzoneEl"
           class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-16 text-center transition-colors duration-300"

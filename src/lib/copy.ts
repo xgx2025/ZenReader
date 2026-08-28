@@ -43,6 +43,7 @@ export const COPY = {
   importFolderAction: '拾整卷（选择文件夹）',
   importDone: '已引入',
   importSkipped: '已略过',
+  importTo: '引入到',
 
   // 设置面板（调适）
   theme: '主题',
@@ -72,10 +73,12 @@ export const COPY = {
   openVault: '打开书库',
   refresh: '刷新',
   removeDoc: '移出书库',
+  removeDocHint: '将释去此卷：本地文件、觉悟笔记与阅读进度一并放下，不可复回。',
   newFolder: '新建分组',
   folderName: '分组名',
   moveTo: '移到分组',
   moveToRoot: '根目录',
+  moreActions: '更多操作',
 } as const
 
 export type CopyKey = keyof typeof COPY

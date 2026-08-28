@@ -196,6 +196,18 @@ export const useLibraryStore = defineStore('library', () => {
     await refresh()
   }
 
+  /** Delete a document's file on disk, dropping its notes + progress. */
+  async function removeDocument(relativePath: string) {
+    await nativeFs.deleteFile(vaultFile(settings.vaultPath, relativePath))
+    const notes = await readNotesIndex(settings.vaultPath)
+    if (notes[relativePath]) {
+      delete notes[relativePath]
+      await writeNotesIndex(settings.vaultPath, notes)
+    }
+    useProgressStore().drop(relativePath)
+    await refresh()
+  }
+
   /** Parse files one-by-one in the background, filling `index` as it goes. */
   async function indexVault(list: VaultFile[]) {
     const gen = ++indexGen
@@ -236,5 +248,6 @@ export const useLibraryStore = defineStore('library', () => {
     openVault,
     createFolder,
     moveDocument,
+    removeDocument,
   }
 })

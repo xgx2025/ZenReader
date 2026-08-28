@@ -2,14 +2,19 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ContextMenu from '@/components/common/ContextMenu.vue'
 import DocumentCard from '@/components/library/DocumentCard.vue'
 import FolderTree from '@/components/library/FolderTree.vue'
+import MoveDialog from '@/components/library/MoveDialog.vue'
 
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { COPY } from '@/lib/copy'
+import { folderPathFromRelative } from '@/lib/vault'
 import type { ThemeName } from '@/types/settings'
+import type { VaultFile } from '@/types/document'
 
 const library = useLibraryStore()
 const settings = useSettingsStore()
@@ -29,6 +34,52 @@ const SORTS = [
 
 function toggleFolder(path: string) {
   library.selectedFolder = library.selectedFolder === path ? '' : path
+}
+
+// 文档操作：右击卡片或点「⋯」唤起菜单 → 移到分组 / 移出书库
+const menu = ref<{ open: boolean; x: number; y: number; file: VaultFile | null }>({
+  open: false,
+  x: 0,
+  y: 0,
+  file: null,
+})
+const moveTarget = ref<VaultFile | null>(null)
+const removeTarget = ref<VaultFile | null>(null)
+
+function openMenu(file: VaultFile, x: number, y: number) {
+  menu.value = { open: true, x, y, file }
+}
+
+function closeMenu() {
+  menu.value.open = false
+}
+
+function onMenuMove() {
+  const file = menu.value.file
+  closeMenu()
+  if (file) moveTarget.value = file
+}
+
+function onMenuRemove() {
+  const file = menu.value.file
+  closeMenu()
+  if (file) removeTarget.value = file
+}
+
+async function onMoveTo(path: string) {
+  const file = moveTarget.value
+  if (!file) return
+  moveTarget.value = null
+  const to = path ? `${path}/${file.name}` : file.name
+  if (to === file.relativePath) return
+  await library.moveDocument(file.relativePath, to)
+}
+
+async function onConfirmRemove() {
+  const file = removeTarget.value
+  if (!file) return
+  removeTarget.value = null
+  await library.removeDocument(file.relativePath)
 }
 
 const creating = ref(false)
@@ -248,9 +299,46 @@ onBeforeUnmount(() => {
             :key="f.relativePath"
             :file="f"
             :meta="library.index[f.relativePath]"
+            @menu="openMenu"
           />
         </div>
       </main>
     </div>
+
+    <ContextMenu :open="menu.open" :x="menu.x" :y="menu.y" @close="closeMenu">
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        @click="onMenuMove"
+      >
+        <ZIcon name="folder" :size="15" class="shrink-0 text-sandal" />
+        {{ COPY.moveTo }}
+      </button>
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        @click="onMenuRemove"
+      >
+        <ZIcon name="delete" :size="15" class="shrink-0 text-sandal" />
+        {{ COPY.removeDoc }}
+      </button>
+    </ContextMenu>
+
+    <MoveDialog
+      :open="moveTarget !== null"
+      :folders="library.flatFolders"
+      :current-path="
+        moveTarget ? folderPathFromRelative(moveTarget.relativePath) : ''
+      "
+      @select="onMoveTo"
+      @close="moveTarget = null"
+    />
+
+    <ConfirmDialog
+      :open="removeTarget !== null"
+      :title="COPY.removeDoc"
+      :message="COPY.removeDocHint"
+      :confirm-label="COPY.delete"
+      @confirm="onConfirmRemove"
+      @close="removeTarget = null"
+    />
   </div>
 </template>
