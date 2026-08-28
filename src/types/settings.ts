@@ -15,6 +15,8 @@ export interface ReaderSettings {
   /** 两端对齐 - flush margins for CJK prose. */
   justify: boolean
   zenMode: boolean
+  /** 沉浸全屏 - entering fullscreen also turns on zen mode (and restores on exit). */
+  immersiveFullscreen: boolean
   /** The vault folder (书库目录) on disk; empty string = no vault open. */
   vaultPath: string
 }
@@ -28,5 +30,6 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   paragraphIndent: false,
   justify: false,
   zenMode: false,
+  immersiveFullscreen: true,
   vaultPath: '',
 }

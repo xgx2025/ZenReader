@@ -20,6 +20,7 @@ import { highlightCodeBlocks } from '@/lib/markdown/highlight'
 import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
 import { useReadingScroll } from '@/composables/useReadingScroll'
+import { useFullscreen } from '@/composables/useFullscreen'
 import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
@@ -39,6 +40,7 @@ const settings = useSettingsStore()
 const library = useLibraryStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
+const { isFullscreen, toggle: toggleFullscreen } = useFullscreen()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
@@ -276,6 +278,8 @@ function onKeydown(e: KeyboardEvent) {
         showNotes.value = false
       } else if (showToc.value) {
         showToc.value = false
+      } else if (isFullscreen.value) {
+        toggleFullscreen()
       }
       return
     case 'j':
@@ -442,6 +446,14 @@ watch(() => route.params.path, loadDocument)
         </button>
 
         <button
+          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+          :title="isFullscreen ? COPY.exitFullscreen : COPY.fullscreen"
+          @click="toggleFullscreen"
+        >
+          <ZIcon :name="isFullscreen ? 'shrink' : 'expand'" :size="17" />
+        </button>
+
+        <button
           class="flex h-9 items-center gap-1.5 rounded-full bg-bamboo/15 px-3 text-sm text-bamboo transition-colors hover:bg-bamboo/25"
           :title="COPY.zenMode"
           @click="settings.setZenMode(!settings.zenMode)"
@@ -531,7 +543,7 @@ watch(() => route.params.path, loadDocument)
     <Transition name="fade">
       <p
         v-if="settings.zenMode"
-        class="pointer-events-none fixed bottom-5 left-1/2 -translate-x-1/2 text-xs text-dusk"
+        class="pointer-events-none fixed bottom-5 right-5 text-xs text-dusk"
       >
         按 Esc 返回
       </p>

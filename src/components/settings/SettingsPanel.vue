@@ -31,6 +31,7 @@ const RANGES = [
 const TOGGLES = [
   { key: 'paragraphIndent', label: COPY.paragraphIndent },
   { key: 'justify', label: COPY.justify },
+  { key: 'immersiveFullscreen', label: COPY.immersiveFullscreen },
 ] as const
 
 type ToggleKey = (typeof TOGGLES)[number]['key']
