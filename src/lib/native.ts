@@ -36,4 +36,14 @@ export const nativeFs = {
   moveFile(from: string, to: string): Promise<void> {
     return invoke('move_file', { from, to })
   },
+
+  /** Read the persisted settings JSON from the app config dir; null if absent. */
+  readSettings(): Promise<string | null> {
+    return invoke<string | null>('read_settings')
+  },
+
+  /** Write settings JSON to the app config dir (file-based persistence). */
+  writeSettings(content: string): Promise<void> {
+    return invoke('write_settings', { content })
+  },
 }

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 
+import { nativeFs, isTauri } from '@/lib/native'
 import {
   DEFAULT_SETTINGS,
   type ReaderSettings,
@@ -8,7 +9,12 @@ import {
 
 const STORAGE_KEY = 'zenreader:settings'
 
-function load(): ReaderSettings {
+/**
+ * Browser-only fallback: previous session's settings live in localStorage.
+ * In the Tauri desktop shell the settings file is the source of truth and
+ * localStorage is never read (except as a one-time migration source).
+ */
+function loadLocal(): ReaderSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULT_SETTINGS }
@@ -19,11 +25,46 @@ function load(): ReaderSettings {
 }
 
 export const useSettingsStore = defineStore('settings', {
-  state: (): ReaderSettings => load(),
+  state: (): ReaderSettings => (isTauri() ? { ...DEFAULT_SETTINGS } : loadLocal()),
 
   actions: {
+    /**
+     * Load persisted settings exactly once, before the app mounts.
+     * - Tauri: read `settings.json` from the app config dir; on first run,
+     *   migrate any legacy localStorage settings into the file.
+     * - Browser: keep the synchronous localStorage snapshot already in state.
+     */
+    async init() {
+      if (!isTauri()) {
+        this.applyAll()
+        return
+      }
+      try {
+        const raw = await nativeFs.readSettings()
+        if (raw != null) {
+          this.$patch({ ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<ReaderSettings>) })
+        } else {
+          const legacy = localStorage.getItem(STORAGE_KEY)
+          if (legacy) {
+            this.$patch({ ...DEFAULT_SETTINGS, ...(JSON.parse(legacy) as Partial<ReaderSettings>) })
+          }
+          await this.persist()
+        }
+      } catch (e) {
+        console.error('[zenreader] load settings failed', e)
+      }
+      this.applyAll()
+    },
+
+    /** Persist to the settings file (Tauri) or localStorage (browser). */
     persist() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.$state))
+      const json = JSON.stringify(this.$state)
+      if (isTauri()) {
+        return nativeFs.writeSettings(json).catch((e) => {
+          console.error('[zenreader] write settings failed', e)
+        })
+      }
+      localStorage.setItem(STORAGE_KEY, json)
     },
 
     applyTheme() {

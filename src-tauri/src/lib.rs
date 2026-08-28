@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
+use tauri::Manager;
 
 /// A single markdown file discovered under a vault folder.
 #[derive(Serialize)]
@@ -143,6 +144,35 @@ fn move_file(from: String, to: String) -> Result<(), String> {
     std::fs::rename(&from, &to).map_err(|e| e.to_string())
 }
 
+/// Absolute path to the app-level settings file inside the OS config directory
+/// (e.g. `~/.config/com.zenreader.app/settings.json` on Linux,
+/// `%APPDATA%\com.zenreader.app\settings.json` on Windows).
+fn settings_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join("settings.json"))
+}
+
+/// Read the persisted settings JSON; `None` when it does not exist yet.
+#[tauri::command]
+fn read_settings(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = settings_path(&app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(content) => Ok(Some(content)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Write the settings JSON to disk, creating the config directory as needed.
+#[tauri::command]
+fn write_settings(app: tauri::AppHandle, content: String) -> Result<(), String> {
+    let path = settings_path(&app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -153,7 +183,9 @@ pub fn run() {
             write_file,
             delete_file,
             create_dir,
-            move_file
+            move_file,
+            read_settings,
+            write_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZenReader");
