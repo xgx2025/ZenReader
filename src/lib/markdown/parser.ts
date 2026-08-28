@@ -5,6 +5,7 @@ import footnote from 'markdown-it-footnote'
 
 import { sanitizeHtml } from './sanitize'
 import { extractStructure, htmlToPlainText } from './structure'
+import { cjkEmphasis } from './cjkEmphasis'
 
 // Deterministic heading ids (`h-0`, `h-1`, …) reset per render.
 const headingCounter = { n: 0 }
@@ -17,6 +18,7 @@ const md = new MarkdownIt({
   .use(anchor, { slugify: () => `h-${headingCounter.n++}` })
   .use(taskLists)
   .use(footnote)
+  .use(cjkEmphasis)
 
 // First-line link guard: allow http/https/mailto and relative paths only.
 const SAFE_LINK = /^(?:https?:\/\/|mailto:|#|\/|\.{1,2}\/)/i

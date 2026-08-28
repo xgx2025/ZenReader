@@ -10,6 +10,9 @@
   margin: 0 auto;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* CJK serif fonts (esp. SimSun on Windows) ship no bold/italic face —
+     synthesize them so **bold** and *italic* stay visible. */
+  font-synthesis: weight style;
   transition: color var(--motion-base) var(--ease-zen);
 }
 
@@ -96,6 +99,13 @@
 .zen-prose ol {
   margin: 0 0 1.4em;
   padding-left: 1.7em;
+}
+/* Tailwind Preflight strips list markers (list-style: none); restore them. */
+.zen-prose ul {
+  list-style-type: disc;
+}
+.zen-prose ol {
+  list-style-type: decimal;
 }
 .zen-prose li {
   margin: 0.4em 0;
