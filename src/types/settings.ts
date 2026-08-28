@@ -1,5 +1,7 @@
 export type ThemeName = 'light' | 'sepia' | 'dark'
 export type ReaderFont = 'serif' | 'sans'
+/** 宣纸纹理强度三档：无 / 微（默认）/ 显。 */
+export type PaperTextureLevel = 'off' | 'subtle' | 'rich'
 
 export interface ReaderSettings {
   theme: ThemeName
@@ -17,6 +19,8 @@ export interface ReaderSettings {
   zenMode: boolean
   /** 沉浸全屏 - entering fullscreen also turns on zen mode (and restores on exit). */
   immersiveFullscreen: boolean
+  /** 宣纸颗粒纹理（WebGL 静态叠层，不可用时静默退回纯色纸底）。 */
+  paperTexture: PaperTextureLevel
   /** The vault folder (书库目录) on disk; empty string = no vault open. */
   vaultPath: string
 }
@@ -31,5 +35,6 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   justify: false,
   zenMode: false,
   immersiveFullscreen: true,
+  paperTexture: 'subtle',
   vaultPath: '',
 }

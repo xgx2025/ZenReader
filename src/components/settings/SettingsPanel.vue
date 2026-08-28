@@ -3,7 +3,12 @@ import ZIcon from '@/components/common/ZIcon.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { nativeFs, isTauri } from '@/lib/native'
 import { COPY } from '@/lib/copy'
-import type { ReaderFont, ThemeName, ReaderSettings } from '@/types/settings'
+import type {
+  ReaderFont,
+  ThemeName,
+  ReaderSettings,
+  PaperTextureLevel,
+} from '@/types/settings'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -20,6 +25,12 @@ const THEMES: { key: ThemeName; label: string }[] = [
 const FONTS: { key: ReaderFont; label: string }[] = [
   { key: 'serif', label: COPY.fontSerif },
   { key: 'sans', label: COPY.fontSans },
+]
+
+const PAPER_TEXTURES: { key: PaperTextureLevel; label: string }[] = [
+  { key: 'off', label: COPY.paperTextureOff },
+  { key: 'subtle', label: COPY.paperTextureSubtle },
+  { key: 'rich', label: COPY.paperTextureRich },
 ]
 
 const RANGES = [
@@ -131,6 +142,24 @@ async function pickVaultFolder() {
                 @click="settings.setTheme(t.key)"
               >
                 {{ t.label }}
+              </button>
+            </div>
+          </section>
+
+          <!-- 纸纹 -->
+          <section class="border-b border-line px-5 py-4">
+            <h3 class="text-xs font-medium tracking-wide text-dusk">
+              {{ COPY.paperTexture }}
+            </h3>
+            <div class="mt-2.5 flex rounded-full border border-line p-0.5">
+              <button
+                v-for="p in PAPER_TEXTURES"
+                :key="p.key"
+                class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
+                :class="{ 'bg-bamboo/15 text-ink': settings.paperTexture === p.key }"
+                @click="settings.update({ paperTexture: p.key })"
+              >
+                {{ p.label }}
               </button>
             </div>
           </section>
