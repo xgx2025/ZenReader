@@ -10,6 +10,7 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import MoveDialog from '@/components/library/MoveDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
@@ -21,6 +22,8 @@ import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
 import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
+import { useLibraryStore } from '@/stores/library'
+import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { COPY } from '@/lib/copy'
 import type { HighlightAnchor, Note } from '@/types/note'
 import type { ThemeName } from '@/types/settings'
@@ -30,12 +33,15 @@ const router = useRouter()
 const reader = useReaderStore()
 const notesStore = useNotesStore()
 const settings = useSettingsStore()
+const library = useLibraryStore()
+const { openPanel } = useSettingsPanel()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
 
 const showToc = ref(false)
 const showNotes = ref(false)
+const moveOpen = ref(false)
 const activeNoteId = ref<string | null>(null)
 
 const composerOpen = ref(false)
@@ -62,13 +68,14 @@ function renderProse() {
 }
 
 async function loadDocument() {
-  const id = route.params.id as string
-  const loaded = await reader.open(id)
+  // Vue Router already decodes path params; relativePath may contain `/`.
+  const relPath = route.params.path as string
+  const loaded = await reader.open(relPath)
   if (!loaded) {
     router.replace('/')
     return
   }
-  await notesStore.load(id)
+  await notesStore.load(relPath)
   await nextTick()
   renderProse()
 }
@@ -77,7 +84,7 @@ function makeNote(anchor: HighlightAnchor, note: string, kind: Note['kind']): No
   const ts = new Date().toISOString()
   return {
     id: crypto.randomUUID(),
-    documentId: doc.value!.id,
+    relativePath: doc.value!.relativePath,
     kind,
     quote: anchor.quote,
     note,
@@ -149,6 +156,16 @@ function scrollToHeading(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 }
 
+async function onMoveTo(path: string) {
+  if (!doc.value) return
+  const fileName = doc.value.fileName
+  const to = path ? `${path}/${fileName}` : fileName
+  moveOpen.value = false
+  if (to === doc.value.relativePath) return // already there — no-op
+  await library.moveDocument(doc.value.relativePath, to)
+  router.replace('/')
+}
+
 watch(
   () => settings.theme,
   () => {
@@ -180,7 +197,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
 })
 
-watch(() => route.params.id, loadDocument)
+watch(() => route.params.path, loadDocument)
 </script>
 
 <template>
@@ -231,7 +248,7 @@ watch(() => route.params.id, loadDocument)
 
         <button
           class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.settings"
+          title="主题"
           @click="cycleTheme"
         >
           <ZIcon :name="settings.theme === 'dark' ? 'moon' : 'sun'" :size="17" />
@@ -243,6 +260,22 @@ watch(() => route.params.id, loadDocument)
           @click="toggleFontFamily"
         >
           <span class="font-serif text-sm">字</span>
+        </button>
+
+        <button
+          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+          :title="COPY.settings"
+          @click="openPanel"
+        >
+          <ZIcon name="settings" :size="18" />
+        </button>
+
+        <button
+          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+          :title="COPY.moveTo"
+          @click="moveOpen = true"
+        >
+          <ZIcon name="folder" :size="17" />
         </button>
 
         <span class="mx-1 h-5 w-px bg-line" />
@@ -348,6 +381,14 @@ watch(() => route.params.id, loadDocument)
       :quote="composerQuote"
       @save="onSaveNote"
       @cancel="composerOpen = false"
+    />
+
+    <MoveDialog
+      :open="moveOpen"
+      :folders="library.flatFolders"
+      :current-path="doc?.folderPath ?? ''"
+      @select="onMoveTo"
+      @close="moveOpen = false"
     />
   </div>
 </template>

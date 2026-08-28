@@ -37,6 +37,32 @@ export const COPY = {
   importFolderAction: '拾整卷（选择文件夹）',
   importDone: '已引入',
   importSkipped: '已略过',
+
+  // 设置面板（调适）
+  theme: '主题',
+  themeLight: '明亮',
+  themeSepia: '暮色',
+  themeDark: '夜读',
+  font: '字体',
+  fontSerif: '衬线',
+  fontSans: '无衬线',
+  fontSize: '字号',
+  lineHeight: '行距',
+  textWidth: '页宽',
+  reading: '阅读',
+  vaultFolder: '书库目录',
+  chooseFolder: '选择文件夹',
+  noFolder: '未设置',
+  clearFolder: '清除',
+  desktopOnly: '桌面端可用',
+
+  openVault: '打开书库',
+  refresh: '刷新',
+  removeDoc: '移出书库',
+  newFolder: '新建分组',
+  folderName: '分组名',
+  moveTo: '移到分组',
+  moveToRoot: '根目录',
 } as const
 
 export type CopyKey = keyof typeof COPY

@@ -1,14 +1,34 @@
-/** A single imported markdown document (a "书卷" in the library). */
+/** A markdown file on disk under the vault folder (from `read_vault`). */
+export interface VaultFile {
+  /** File name (e.g. `静夜思.md`). */
+  name: string
+  /** Absolute path on disk. */
+  path: string
+  /** Path relative to the vault root, `/`-separated. */
+  relativePath: string
+  /** Last-modified time in milliseconds since the Unix epoch. */
+  mtime: number
+}
+
+/** Result of scanning the vault: files + directories (empty ones included). */
+export interface VaultListing {
+  files: VaultFile[]
+  dirs: string[]
+}
+
+/**
+ * A document rendered for reading — a transient view model built on open
+ * by parsing the file's source; not persisted anywhere.
+ */
 export interface Document {
-  id: string
   title: string
-  /** Raw markdown including frontmatter — the source of truth for re-parsing. */
+  /** Raw markdown including frontmatter — the source of truth on disk. */
   source: string
-  /** Rendered + sanitized HTML cache. */
+  /** Rendered + sanitized HTML cache for this open session. */
   html: string
   /** textContent of `html` — shared domain for word count, search, anchors. */
   plainText: string
-  /** Hash of `source`, for dedupe / staleness detection on re-import. */
+  /** Hash of `source`, for staleness detection. */
   sourceHash: string
   frontmatter: Record<string, unknown>
   excerpt: string
@@ -16,11 +36,10 @@ export interface Document {
   /** Estimated reading minutes. */
   readingTime: number
   fileName: string
-  /** Relative folder path (e.g. `notes/philosophy`); empty string for single import. */
+  /** Relative folder path (e.g. `notes/philosophy`); empty string at root. */
   folderPath: string
-  createdAt: string
-  updatedAt: string
-  lastOpenedAt: string
+  /** Path relative to the vault root, `/`-separated. */
+  relativePath: string
 }
 
 export interface TocItem {
@@ -38,6 +57,6 @@ export interface FolderNode {
   name: string
   path: string
   children: FolderNode[]
-  /** Number of documents directly under this folder. */
+  /** Number of files directly under this folder. */
   count: number
 }

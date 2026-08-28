@@ -58,6 +58,11 @@ export const useSettingsStore = defineStore('settings', {
       this.persist()
     },
 
+    setVaultPath(path: string) {
+      this.vaultPath = path
+      this.persist()
+    },
+
     update(patch: Partial<ReaderSettings>) {
       Object.assign(this, patch)
       this.applyAll()

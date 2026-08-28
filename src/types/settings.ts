@@ -11,6 +11,8 @@ export interface ReaderSettings {
   textWidth: number
   fontFamily: ReaderFont
   zenMode: boolean
+  /** The vault folder (书库目录) on disk; empty string = no vault open. */
+  vaultPath: string
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -20,4 +22,5 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   textWidth: 42,
   fontFamily: 'serif',
   zenMode: false,
+  vaultPath: '',
 }

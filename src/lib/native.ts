@@ -1,14 +1,8 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 
-/** A markdown file discovered under a vault folder. */
-export interface VaultFile {
-  name: string
-  /** Absolute path on disk. */
-  path: string
-  /** Path relative to the vault root, `/`-separated. */
-  relativePath: string
-}
+import type { VaultFile, VaultListing } from '@/types/document'
 
+export type { VaultFile, VaultListing }
 export { isTauri }
 
 /** Thin wrappers over the Tauri Rust filesystem commands. */
@@ -18,9 +12,9 @@ export const nativeFs = {
     return invoke<string | null>('pick_folder')
   },
 
-  /** Recursively list all `.md` files under `dir`. */
-  readVault(dir: string): Promise<VaultFile[]> {
-    return invoke<VaultFile[]>('read_vault', { dir })
+  /** Recursively list all `.md` files and directories under `dir`. */
+  readVault(dir: string): Promise<VaultListing> {
+    return invoke<VaultListing>('read_vault', { dir })
   },
 
   readFile(path: string): Promise<string> {
@@ -29,5 +23,17 @@ export const nativeFs = {
 
   writeFile(path: string, content: string): Promise<void> {
     return invoke('write_file', { path, content })
+  },
+
+  deleteFile(path: string): Promise<void> {
+    return invoke('delete_file', { path })
+  },
+
+  createDir(path: string): Promise<void> {
+    return invoke('create_dir', { path })
+  },
+
+  moveFile(from: string, to: string): Promise<void> {
+    return invoke('move_file', { from, to })
   },
 }

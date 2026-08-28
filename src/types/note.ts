@@ -12,7 +12,8 @@ export type NoteKind = 'highlight' | 'note'
 /** A 觉悟笔记 always wraps a highlight; kind `highlight` means no note text yet. */
 export interface Note {
   id: string
-  documentId: string
+  /** Path relative to the vault root of the owning document. */
+  relativePath: string
   kind: NoteKind
   /** The selected / highlighted rendered text. */
   quote: string
