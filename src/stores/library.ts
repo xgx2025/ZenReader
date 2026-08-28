@@ -13,6 +13,7 @@ import { renderMarkdown } from '@/lib/markdown/parser'
 import { parseFrontmatter } from '@/lib/markdown/frontmatter'
 import { countWords, computeReadingTime, makeExcerpt } from '@/lib/markdown/structure'
 import { useSettingsStore } from '@/stores/settings'
+import { useProgressStore } from '@/stores/progress'
 import type { VaultFile, FolderNode } from '@/types/document'
 
 type SortKey = 'modified' | 'title'
@@ -191,6 +192,7 @@ export const useLibraryStore = defineStore('library', () => {
       delete notes[from]
       await writeNotesIndex(settings.vaultPath, notes)
     }
+    useProgressStore().move(from, to) // reading position follows the file
     await refresh()
   }
 

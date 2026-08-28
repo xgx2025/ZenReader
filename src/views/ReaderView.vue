@@ -24,10 +24,12 @@ import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
 import { useLibraryStore } from '@/stores/library'
+import { useProgressStore } from '@/stores/progress'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { COPY } from '@/lib/copy'
 import type { HighlightAnchor, Note } from '@/types/note'
 import type { ThemeName } from '@/types/settings'
+import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,6 +37,7 @@ const reader = useReaderStore()
 const notesStore = useNotesStore()
 const settings = useSettingsStore()
 const library = useLibraryStore()
+const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
 
 const proseEl = ref<HTMLElement | null>(null)
@@ -49,19 +52,40 @@ const composerOpen = ref(false)
 const composerQuote = ref('')
 const composerAnchor = ref<HighlightAnchor | null>(null)
 
+/** 续读 hint - fades away shortly after restoring a position. */
+const showResumeHint = ref(false)
+/** Guards progress recording while a document switch is in flight. */
+const restoring = ref(false)
+
 const doc = computed(() => reader.current)
 const structure = computed(() =>
   doc.value ? extractStructure(doc.value.html) : { toc: [], hasCodeBlocks: false },
 )
 const toc = computed(() => structure.value.toc)
 const headingIds = computed(() => toc.value.map((t) => t.id))
+
+function onScrollProgress(ratio: number) {
+  const d = reader.current
+  if (!d || restoring.value) return
+  progressStore.record(d.relativePath, d.sourceHash, ratio)
+}
+
+/** Live progress for the thin top bar (0-100). */
+const progressPct = computed(() => {
+  const d = reader.current
+  if (!d) return 0
+  const e = progressStore.get(d.relativePath)
+  return e ? Math.round(Math.min(1, Math.max(0, e.ratio)) * 100) : 0
+})
+
 const {
   containerRef,
   activeHeadingId,
   toolbarHidden,
   scrollByFraction,
   scrollToHeading: scrollToHeadingEl,
-} = useReadingScroll(headingIds)
+  restoreRatio,
+} = useReadingScroll(headingIds, onScrollProgress)
 const anchors = computed<AppliedAnchor[]>(() =>
   notesStore.notes.map((n) => ({ noteId: n.id, anchor: n.anchor })),
 )
@@ -91,6 +115,7 @@ function renderProse() {
 async function loadDocument() {
   // Vue Router already decodes path params; relativePath may contain `/`.
   const relPath = route.params.path as string
+  restoring.value = true
   const loaded = await reader.open(relPath)
   if (!loaded) {
     router.replace('/')
@@ -99,12 +124,30 @@ async function loadDocument() {
   await notesStore.load(relPath)
   await nextTick()
   renderProse()
-  // Same component instance is reused across documents - reset the surface.
+  // Same component instance is reused across documents - reset the surface,
+  // then restore the saved position (续读) if the content still matches.
   if (containerRef.value) {
     containerRef.value.scrollTop = 0
     activeHeadingId.value = ''
     toolbarHidden.value = false
+    const saved = progressStore.get(relPath)
+    if (
+      saved &&
+      saved.hash === loaded.sourceHash &&
+      saved.ratio >= RESUME_MIN_RATIO &&
+      saved.ratio < FINISHED_RATIO &&
+      restoreRatio(saved.ratio)
+    ) {
+      showResumeHint.value = true
+      setTimeout(() => {
+        showResumeHint.value = false
+      }, 2600)
+    }
   }
+  // Let pending scroll events from the previous document drain first.
+  setTimeout(() => {
+    restoring.value = false
+  }, 0)
 }
 
 function makeNote(anchor: HighlightAnchor, note: string, kind: Note['kind']): Note {
@@ -290,11 +333,18 @@ watch(
 onMounted(() => {
   loadDocument()
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('beforeunload', onBeforeUnload)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  progressStore.flush()
 })
+
+function onBeforeUnload() {
+  progressStore.flush()
+}
 
 watch(() => route.params.path, loadDocument)
 </script>
@@ -467,6 +517,16 @@ watch(() => route.params.path, loadDocument)
       </Transition>
     </div>
 
+    <!-- 阅读进度 - a wisp of bamboo, present even in 禅境 -->
+    <div
+      class="pointer-events-none fixed inset-x-0 top-0 z-30 h-0.5 bg-transparent"
+    >
+      <div
+        class="h-full bg-bamboo/70 transition-[width] duration-200 ease-zen"
+        :style="{ width: `${progressPct}%` }"
+      />
+    </div>
+
     <!-- 禅境 exit hint -->
     <Transition name="fade">
       <p
@@ -474,6 +534,17 @@ watch(() => route.params.path, loadDocument)
         class="pointer-events-none fixed bottom-5 left-1/2 -translate-x-1/2 text-xs text-dusk"
       >
         按 Esc 返回
+      </p>
+    </Transition>
+
+    <!-- 续读 hint -->
+    <Transition name="fade">
+      <p
+        v-if="showResumeHint"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+      >
+        <ZIcon name="bookmark" :size="13" class="text-sandal" />
+        {{ COPY.resumeReading }}
       </p>
     </Transition>
 

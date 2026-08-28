@@ -32,6 +32,10 @@ export const COPY = {
   words: '字',
   minutes: '分',
 
+  resumeReading: '接着上次',
+  readingProgress: '读到',
+  finished: '已读毕',
+
   importDropHint: '引卷于此 —— 拖入 .md 文件',
   importFileAction: '引卷（选择文件）',
   importFolderAction: '拾整卷（选择文件夹）',

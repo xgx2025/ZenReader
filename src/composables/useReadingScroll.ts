@@ -6,11 +6,16 @@ import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
  * - toolbar auto-hide: header slides away while reading down, returns on
  *   the slightest upward scroll - position is preserved via translate, so
  *   the prose never reflows.
+ * - progress: scroll ratio 0..1, reported through `onProgress` for the
+ *   caller to persist (rAF-throttled, so at most once per frame).
  *
  * The scroll listener is rAF-throttled; all state updates are cheap
  * (a few getBoundingClientRect calls against the TOC's heading ids).
  */
-export function useReadingScroll(headingIds: Ref<string[]>) {
+export function useReadingScroll(
+  headingIds: Ref<string[]>,
+  onProgress?: (ratio: number) => void,
+) {
   /** The scrollable element wrapping the prose. */
   const containerRef = ref<HTMLElement | null>(null)
   /** id of the heading the reader is currently in ('' before the first). */
@@ -48,6 +53,11 @@ export function useReadingScroll(headingIds: Ref<string[]>) {
       toolbarHidden.value = false
     }
     lastY = y
+
+    if (onProgress) {
+      const scrollable = el.scrollHeight - el.clientHeight
+      onProgress(scrollable > 0 ? Math.min(1, y / scrollable) : 1)
+    }
   }
 
   function onScroll() {
@@ -82,11 +92,23 @@ export function useReadingScroll(headingIds: Ref<string[]>) {
     })
   }
 
+  /** Restore a saved scroll ratio (续读). Returns true if it moved. */
+  function restoreRatio(ratio: number): boolean {
+    const el = containerRef.value
+    if (!el) return false
+    const scrollable = el.scrollHeight - el.clientHeight
+    if (scrollable <= 0) return false
+    el.scrollTop = ratio * scrollable
+    lastY = el.scrollTop
+    return el.scrollTop > 0
+  }
+
   return {
     containerRef,
     activeHeadingId,
     toolbarHidden,
     scrollByFraction,
     scrollToHeading,
+    restoreRatio,
   }
 }
