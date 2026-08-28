@@ -6,7 +6,7 @@
   font-size: var(--reader-font-size, 1.0625rem);
   line-height: var(--reader-line-height, 1.95);
   color: var(--ink);
-  max-width: var(--reader-text-width, 42rem);
+  max-width: var(--reader-text-width, 56rem);
   margin: 0 auto;
   word-break: break-word;
   overflow-wrap: break-word;

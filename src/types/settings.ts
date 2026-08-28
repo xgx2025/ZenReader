@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   theme: 'light',
   fontSize: 17,
   lineHeight: 1.95,
-  textWidth: 42,
+  textWidth: 56,
   fontFamily: 'serif',
   paragraphIndent: false,
   justify: false,
