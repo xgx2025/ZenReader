@@ -49,7 +49,10 @@
   --color-line: var(--line);
   --color-ember: var(--ember);
 
-  --font-serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun",
+  /* Noto Serif SC（可变字体）必须排在 Source Han Serif SC 之前：只装了单字重
+     文件（如 "Source Han Serif SC Heavy"）的机器会以排版族名注册出仅含 900
+     字面的 "Source Han Serif SC"，导致正文/加粗/标题全部渲染成同一粗细。 */
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun",
     serif;
   --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 
