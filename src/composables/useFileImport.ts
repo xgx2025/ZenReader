@@ -2,6 +2,7 @@ import { ref } from 'vue'
 
 import { nativeFs } from '@/lib/native'
 import { joinPath, vaultFile, folderPathFromRelative } from '@/lib/vault'
+import { COPY } from '@/lib/copy'
 import { useSettingsStore } from '@/stores/settings'
 import { useLibraryStore } from '@/stores/library'
 import type { ImportItem, ImportResult } from '@/types/import'
@@ -70,6 +71,8 @@ export function useFileImport() {
 
       if (existing.has(relPath)) {
         item.status = 'skipped'
+        // 说清略过的缘由，不让用户猜文件为何没进来。
+        item.reason = COPY.importDuplicateHint
         skipped++
         continue
       }
@@ -84,7 +87,7 @@ export function useFileImport() {
       } catch (e) {
         item.status = 'error'
         item.error = e instanceof Error ? e.message : String(e)
-        errors.push({ fileName: file.name, reason: item.error ?? '未知错误' })
+        errors.push({ fileName: file.name, reason: item.error ?? COPY.importUnknownError })
       }
     }
 

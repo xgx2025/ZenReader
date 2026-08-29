@@ -14,6 +14,8 @@ import { parseFrontmatter } from '@/lib/markdown/frontmatter'
 import { countWords, computeReadingTime, makeExcerpt } from '@/lib/markdown/structure'
 import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
+import { useToast } from '@/composables/useToast'
+import { COPY } from '@/lib/copy'
 import type { VaultFile, FolderNode } from '@/types/document'
 
 type SortKey = 'modified' | 'title'
@@ -22,6 +24,8 @@ type SortKey = 'modified' | 'title'
 export interface IndexedMeta {
   title: string
   excerpt: string
+  /** 全文纯文本，仅驻内存供书库全文搜索（不持久化）。 */
+  fullText: string
   wordCount: number
   readingTime: number
 }
@@ -113,7 +117,9 @@ export const useLibraryStore = defineStore('library', () => {
         const title = meta?.title ?? resolveTitle({}, f.name)
         return (
           title.toLowerCase().includes(q) ||
-          (meta?.excerpt ?? '').toLowerCase().includes(q)
+          (meta?.excerpt ?? '').toLowerCase().includes(q) ||
+          // 全文检索：中后部内容同样可寻。
+          (meta?.fullText ?? '').toLowerCase().includes(q)
         )
       })
     }
@@ -157,6 +163,8 @@ export const useLibraryStore = defineStore('library', () => {
       console.error('[zenreader] read_vault failed', e)
       files.value = []
       dirs.value = []
+      // 读库失败不再静默成「尚无书籍」，轻声告知用户原因。
+      useToast().notify(COPY.vaultReadFailed, 'sandal')
     } finally {
       loading.value = false
     }
@@ -221,6 +229,7 @@ export const useLibraryStore = defineStore('library', () => {
         index.value[f.relativePath] = {
           title: resolveTitle(data, f.name),
           excerpt: makeExcerpt(plainText),
+          fullText: plainText,
           wordCount,
           readingTime: computeReadingTime(wordCount),
         }

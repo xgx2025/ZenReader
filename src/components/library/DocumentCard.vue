@@ -10,8 +10,14 @@ import type { IndexedMeta } from '@/stores/library'
 import type { VaultFile } from '@/types/document'
 
 const props = withDefaults(
-  defineProps<{ file: VaultFile; meta?: IndexedMeta; index?: number }>(),
-  { index: 0 },
+  defineProps<{
+    file: VaultFile
+    meta?: IndexedMeta
+    index?: number
+    /** 当前书库搜索词：全文命中时在卡片上展示上下文片段。 */
+    query?: string
+  }>(),
+  { index: 0, query: '' },
 )
 
 const emit = defineEmits<{ menu: [file: VaultFile, x: number, y: number] }>()
@@ -36,6 +42,24 @@ const finished = computed(() => {
   return !!e && e.ratio >= FINISHED_RATIO
 })
 
+/** 全文命中片段：展示「为什么搜到它」，回答标题与摘要之外的命中。 */
+const hit = computed(() => {
+  const q = props.query.trim().toLowerCase()
+  const text = props.meta?.fullText
+  if (!q || !text) return null
+  const i = text.toLowerCase().indexOf(q)
+  if (i === -1) return null
+  const start = Math.max(0, i - 40)
+  const end = Math.min(text.length, i + q.length + 40)
+  return {
+    lead: start > 0 ? '……' : '',
+    before: text.slice(start, i),
+    match: text.slice(i, i + q.length),
+    after: text.slice(i + q.length, end),
+    tail: end < text.length ? '……' : '',
+  }
+})
+
 /** 入场 stagger：逐张上浮，长列表封顶不等待。 */
 const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
 </script>
@@ -48,7 +72,7 @@ const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
   >
     <RouterLink
       :to="`/read/${encodeURIComponent(file.relativePath)}`"
-      class="flex flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04),0_16px_40px_rgba(0,0,0,0.07)]"
+      class="flex flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
     >
       <div class="flex items-start justify-between gap-2">
         <h3 class="min-h-[2lh] font-serif text-lg leading-snug text-ink line-clamp-2">
@@ -63,8 +87,15 @@ const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
         </span>
       </div>
 
+      <!-- 全文命中片段优先于摘要，说明命中缘由 -->
       <p
-        v-if="meta?.excerpt"
+        v-if="hit"
+        class="mt-2 text-xs leading-relaxed text-dusk"
+      >
+        {{ hit.lead }}{{ hit.before }}<mark class="rounded-sm bg-bamboo/20 px-0.5 text-ink">{{ hit.match }}</mark>{{ hit.after }}{{ hit.tail }}
+      </p>
+      <p
+        v-else-if="meta?.excerpt"
         class="mt-2 text-sm leading-relaxed text-ink-soft line-clamp-3"
       >
         {{ meta.excerpt }}
@@ -98,7 +129,7 @@ const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
     </RouterLink>
 
     <button
-      class="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-ink-soft opacity-0 transition-opacity duration-200 hover:bg-bamboo/10 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+      class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full text-ink-soft opacity-0 transition-opacity duration-200 hover:bg-bamboo/10 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
       :title="COPY.moreActions"
       @click.prevent.stop="emit('menu', file, $event.clientX, $event.clientY)"
     >

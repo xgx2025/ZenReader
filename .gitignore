@@ -14,3 +14,5 @@ src-tauri/gen/
 doc/
 # Claude AI 会话缓存
 .claude/
+# Zed 编辑器本地会话数据
+.zcode/

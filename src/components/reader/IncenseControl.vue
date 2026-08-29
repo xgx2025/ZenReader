@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
     <Transition name="fade-slide">
       <div
         v-if="menuOpen"
-        class="absolute top-full z-50 mt-1.5 w-52 rounded-xl border border-line bg-paper/95 p-3.5 shadow-[0_10px_32px_rgba(0,0,0,0.12)] backdrop-blur-sm"
+        class="absolute top-full z-50 mt-1.5 w-52 rounded-xl border border-line bg-paper/95 p-3.5 shadow-zen-md backdrop-blur-sm"
         :class="variant === 'zen' ? 'right-0' : 'left-0'"
       >
         <div class="flex items-center gap-4">

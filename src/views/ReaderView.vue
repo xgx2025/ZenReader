@@ -10,12 +10,14 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import type { IconName } from '@/components/common/ZIcon.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
 import ReminderToast from '@/components/reader/ReminderToast.vue'
 import IncenseControl from '@/components/reader/IncenseControl.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
+import ShortcutSheet from '@/components/reader/ShortcutSheet.vue'
 
 import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
@@ -29,6 +31,7 @@ import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
+import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
 import type { HighlightAnchor, Note } from '@/types/note'
 import type { ThemeName } from '@/types/settings'
@@ -46,9 +49,11 @@ const { start, stop, awayNotice, clearAwayNotice } = useZenClock()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
+const { notify } = useToast()
 
 const showToc = ref(false)
 const showNotes = ref(false)
+const showShortcuts = ref(false)
 const activeNoteId = ref<string | null>(null)
 
 interface ComposerState {
@@ -103,6 +108,13 @@ const anchors = computed<AppliedAnchor[]>(() =>
 
 const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
 
+/** 三态主题图标：明亮→日、暮色→落日、夜读→月。 */
+const THEME_ICON: Record<ThemeName, IconName> = {
+  light: 'sun',
+  sepia: 'sunset',
+  dark: 'moon',
+}
+
 // 香已点燃提示（由 IncenseControl 点香时触发）。
 const showLitNotice = ref(false)
 let litNoticeTimer: ReturnType<typeof setTimeout> | null = null
@@ -151,6 +163,8 @@ async function loadDocument() {
   restoring.value = true
   const loaded = await reader.open(relPath)
   if (!loaded) {
+    // 打不开的卷不再无声消失，说明缘由再回书库。
+    notify(COPY.docOpenFailed, 'sandal')
     router.replace('/')
     return
   }
@@ -216,9 +230,13 @@ function makeFreeNote(note: string): Note {
 async function onHighlight() {
   const cap = capture.value
   if (!cap) return
-  await notesStore.add(makeNote(cap.anchor, '', 'highlight'))
-  dismiss()
-  renderProse()
+  try {
+    await notesStore.add(makeNote(cap.anchor, '', 'highlight'))
+    dismiss()
+    renderProse()
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
 }
 
 function onOpenComposer() {
@@ -259,20 +277,24 @@ function onNewFreeNote() {
 async function onSaveNote(text: string) {
   const c = composer.value
   if (!c) return
-  if (c.noteId) {
-    const target = notesStore.notes.find((x) => x.id === c.noteId)
-    await notesStore.update(
-      c.noteId,
-      target?.kind === 'highlight' ? { note: text, kind: 'note' } : { note: text },
-    )
+  try {
+    if (c.noteId) {
+      const target = notesStore.notes.find((x) => x.id === c.noteId)
+      await notesStore.update(
+        c.noteId,
+        target?.kind === 'highlight' ? { note: text, kind: 'note' } : { note: text },
+      )
+    } else if (c.anchor) {
+      await notesStore.add(makeNote(c.anchor, text, 'note'))
+      renderProse()
+    } else {
+      await notesStore.add(makeFreeNote(text))
+    }
+    notify(COPY.noteSaved)
     composer.value = null
-  } else if (c.anchor) {
-    await notesStore.add(makeNote(c.anchor, text, 'note'))
-    composer.value = null
-    renderProse()
-  } else {
-    await notesStore.add(makeFreeNote(text))
-    composer.value = null
+  } catch {
+    // 留住弹层与已输入的内容，让用户知道没存上。
+    notify(COPY.opFailed, 'sandal')
   }
 }
 
@@ -286,9 +308,13 @@ async function onConfirmDelete() {
   const n = deleteTarget.value
   if (!n) return
   deleteTarget.value = null
-  await notesStore.remove(n.id)
-  if (activeNoteId.value === n.id) activeNoteId.value = null
-  renderProse()
+  try {
+    await notesStore.remove(n.id)
+    if (activeNoteId.value === n.id) activeNoteId.value = null
+    renderProse()
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
 }
 
 function onProseClick(e: MouseEvent) {
@@ -420,6 +446,9 @@ function onKeydown(e: KeyboardEvent) {
     case 'Z':
       settings.setZenMode(!settings.zenMode)
       return
+    case '?':
+      showShortcuts.value = !showShortcuts.value
+      return
   }
 }
 
@@ -458,7 +487,7 @@ watch(() => route.params.path, loadDocument)
     <!-- Top toolbar (hidden in 禅境; tucks away while scrolling down) -->
     <header
       v-if="!settings.zenMode"
-      class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2.5 transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
+      class="header-fade relative flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
       :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
     >
       <div class="flex min-w-0 items-center gap-1">
@@ -507,15 +536,15 @@ watch(() => route.params.path, loadDocument)
 
         <button
           class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          title="主题"
+          :title="COPY.theme"
           @click="cycleTheme"
         >
-          <ZIcon :name="settings.theme === 'dark' ? 'moon' : 'sun'" :size="17" />
+          <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
         </button>
         <button
           class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
           :class="{ 'text-bamboo': settings.fontFamily === 'sans' }"
-          title="字体"
+          :title="COPY.font"
           @click="toggleFontFamily"
         >
           <span class="font-serif text-sm">字</span>
@@ -527,6 +556,14 @@ watch(() => route.params.path, loadDocument)
           @click="openPanel"
         >
           <ZIcon name="settings" :size="18" />
+        </button>
+
+        <button
+          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+          :title="COPY.shortcutSheet"
+          @click="showShortcuts = true"
+        >
+          <ZIcon name="keyboard" :size="16" />
         </button>
 
         <span class="mx-1 h-5 w-px bg-line" />
@@ -572,7 +609,13 @@ watch(() => route.params.path, loadDocument)
             <h2 class="font-serif text-base">{{ COPY.toc }}</h2>
           </div>
           <nav class="flex-1 space-y-0.5 overflow-y-auto p-3">
-            <p v-if="toc.length === 0" class="px-2 text-sm text-dusk">无</p>
+            <p
+              v-if="toc.length === 0"
+              class="flex flex-col items-center px-2 py-6 text-xs text-dusk"
+            >
+              <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
+              <span class="mt-3">{{ COPY.emptyToc }}</span>
+            </p>
             <a
               v-for="item in toc"
               :key="item.id"
@@ -599,7 +642,16 @@ watch(() => route.params.path, loadDocument)
           class="px-6 py-10 md:px-12"
           :class="{ 'py-16': settings.zenMode }"
         >
+          <!-- 翻卷中：首次打开文档时的呼吸圆点 -->
+          <div
+            v-if="reader.loading && !doc"
+            class="flex flex-col items-center py-32 text-dusk"
+          >
+            <div class="zen-breathe h-2 w-2 rounded-full bg-bamboo/50"></div>
+            <p class="mt-6 font-serif text-lg">{{ COPY.loadingDoc }}</p>
+          </div>
           <article
+            v-else
             ref="proseEl"
             class="zen-prose"
             :data-indent="settings.paragraphIndent ? 'true' : 'false'"
@@ -644,7 +696,7 @@ watch(() => route.params.path, loadDocument)
         v-if="settings.zenMode"
         class="pointer-events-none fixed bottom-5 right-5 text-xs text-dusk"
       >
-        按 Esc 返回
+        {{ COPY.escToReturn }}
       </p>
     </Transition>
 
@@ -660,7 +712,7 @@ watch(() => route.params.path, loadDocument)
     <Transition name="fade">
       <p
         v-if="awayNotice"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
       >
         <ZIcon name="incense" :size="13" class="text-dusk" />
         {{ COPY.awayNotice }}
@@ -671,7 +723,7 @@ watch(() => route.params.path, loadDocument)
     <Transition name="fade">
       <p
         v-if="showResumeHint"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
       >
         <ZIcon name="bookmark" :size="13" class="text-sandal" />
         {{ COPY.resumeReading }}
@@ -682,7 +734,7 @@ watch(() => route.params.path, loadDocument)
     <Transition name="fade">
       <p
         v-if="showLitNotice"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
       >
         <ZIcon name="incense" :size="13" class="text-sandal" />
         {{ litNoticeText }}
@@ -712,6 +764,11 @@ watch(() => route.params.path, loadDocument)
       :confirm-label="COPY.delete"
       @confirm="onConfirmDelete"
       @close="deleteTarget = null"
+    />
+
+    <ShortcutSheet
+      :open="showShortcuts"
+      @close="showShortcuts = false"
     />
 
     <ReminderToast />

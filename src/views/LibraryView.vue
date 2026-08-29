@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import type { IconName } from '@/components/common/ZIcon.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import DocumentCard from '@/components/library/DocumentCard.vue'
@@ -11,6 +12,8 @@ import MoveDialog from '@/components/library/MoveDialog.vue'
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
+import { useVaultDrop, type DropImportResult } from '@/composables/useVaultDrop'
+import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
 import { folderPathFromRelative } from '@/lib/vault'
 import type { ThemeName } from '@/types/settings'
@@ -19,8 +22,16 @@ import type { VaultFile } from '@/types/document'
 const library = useLibraryStore()
 const settings = useSettingsStore()
 const { openPanel } = useSettingsPanel()
+const { notify } = useToast()
 
 const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
+
+/** 三态主题图标：明亮→日、暮色→落日、夜读→月。 */
+const THEME_ICON: Record<ThemeName, IconName> = {
+  light: 'sun',
+  sepia: 'sunset',
+  dark: 'moon',
+}
 
 function cycleTheme() {
   const i = THEME_CYCLE.indexOf(settings.theme)
@@ -72,14 +83,24 @@ async function onMoveTo(path: string) {
   moveTarget.value = null
   const to = path ? `${path}/${file.name}` : file.name
   if (to === file.relativePath) return
-  await library.moveDocument(file.relativePath, to)
+  try {
+    await library.moveDocument(file.relativePath, to)
+    notify(COPY.movedDone)
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
 }
 
 async function onConfirmRemove() {
   const file = removeTarget.value
   if (!file) return
   removeTarget.value = null
-  await library.removeDocument(file.relativePath)
+  try {
+    await library.removeDocument(file.relativePath)
+    notify(COPY.removedDone, 'bamboo')
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
 }
 
 const creating = ref(false)
@@ -104,9 +125,29 @@ function canCreate() {
 
 async function submitFolder() {
   if (!canCreate()) return
-  await library.createFolder(newFolderName.value.trim())
+  try {
+    await library.createFolder(newFolderName.value.trim())
+    notify(COPY.folderCreated)
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
   cancelCreating()
 }
+
+// 拖拽引卷：拖入即浮起「松手引卷入藏」，落点按当前选中分组导入。
+function onDropResult(r: DropImportResult) {
+  const parts: string[] = []
+  if (r.imported) parts.push(`${COPY.importDone} ${r.imported}`)
+  if (r.skipped) parts.push(`${COPY.importSkipped} ${r.skipped}`)
+  if (r.failed) parts.push(`${COPY.importError} ${r.failed}`)
+  if (!parts.length) return
+  notify(parts.join(' · '), r.imported ? 'bamboo' : 'sandal')
+}
+
+const { dragging: dropDragging } = useVaultDrop(
+  () => library.selectedFolder,
+  onDropResult,
+)
 
 function onWindowFocus() {
   library.refresh()
@@ -146,10 +187,10 @@ onBeforeUnmount(() => {
 
         <button
           class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          title="主题"
+          :title="COPY.theme"
           @click="cycleTheme"
         >
-          <ZIcon :name="settings.theme === 'dark' ? 'moon' : 'sun'" :size="17" />
+          <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
         </button>
 
         <button
@@ -240,7 +281,13 @@ onBeforeUnmount(() => {
           :selected="library.selectedFolder"
           @select="toggleFolder"
         />
-        <p v-else class="px-2.5 text-xs text-dusk">暂无分组</p>
+        <p
+          v-else
+          class="flex flex-col items-center px-2.5 py-4 text-xs text-dusk"
+        >
+          <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
+          <span class="mt-3">{{ COPY.emptyFolders }}</span>
+        </p>
       </aside>
 
       <main class="min-w-0 flex-1 p-6">
@@ -263,7 +310,7 @@ onBeforeUnmount(() => {
               class="rounded-full px-3 py-1 text-xs transition-colors duration-200"
               :class="
                 library.sortBy === o.key
-                  ? 'bg-paper font-medium text-ink shadow-sm'
+                  ? 'bg-bamboo/15 font-medium text-ink'
                   : 'text-ink-soft hover:text-ink'
               "
               @click="library.sortBy = o.key"
@@ -273,8 +320,17 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <!-- 开卷中：首次扫描书库时的呼吸圆点 -->
         <div
-          v-if="library.files.length === 0"
+          v-if="library.loading && library.files.length === 0"
+          class="mt-24 flex flex-col items-center text-center text-dusk"
+        >
+          <div class="zen-breathe h-2 w-2 rounded-full bg-bamboo/50"></div>
+          <p class="mt-6 font-serif text-lg">{{ COPY.loadingLibrary }}</p>
+        </div>
+
+        <div
+          v-else-if="library.files.length === 0"
           class="mt-24 flex flex-col items-center text-center text-dusk"
         >
           <div class="zen-breathe h-2 w-2 rounded-full bg-bamboo/50"></div>
@@ -306,6 +362,7 @@ onBeforeUnmount(() => {
             :file="f"
             :meta="library.index[f.relativePath]"
             :index="i"
+            :query="library.search"
             @menu="openMenu"
           />
         </div>
@@ -347,5 +404,30 @@ onBeforeUnmount(() => {
       @confirm="onConfirmRemove"
       @close="removeTarget = null"
     />
+
+    <!-- 拖拽引卷遮罩：悬浮全屏提示，落点即入藏 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="dropDragging"
+          class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-paper/85 backdrop-blur-sm"
+        >
+          <div
+            class="flex flex-col items-center rounded-3xl border-2 border-dashed border-bamboo/50 px-16 py-12 text-center"
+          >
+            <ZIcon
+              name="import"
+              :size="40"
+              :stroke-width="1"
+              class="text-bamboo"
+            />
+            <p class="mt-4 font-serif text-lg text-ink">
+              {{ COPY.dropToImport }}
+            </p>
+            <p class="mt-1 text-xs text-dusk">.md / .markdown</p>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>

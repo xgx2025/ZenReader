@@ -24,7 +24,7 @@ const style = computed(() => {
     <Transition name="fade">
       <div
         v-if="visible && rect"
-        class="fixed z-50 flex items-center gap-1 rounded-full border border-line bg-paper-deep px-1.5 py-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
+        class="fixed z-50 flex items-center gap-1 rounded-full border border-line bg-paper-deep px-1.5 py-1 shadow-zen-md"
         :style="style"
       >
         <button

@@ -6,11 +6,13 @@ import ZIcon from '@/components/common/ZIcon.vue'
 
 import { useFileImport } from '@/composables/useFileImport'
 import { useLibraryStore } from '@/stores/library'
+import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
 import type { ImportResult } from '@/types/import'
 
 const { items, importing, importFiles } = useFileImport()
 const library = useLibraryStore()
+const { notify } = useToast()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
@@ -29,6 +31,8 @@ function run(files: File[]) {
   result.value = null
   importFiles(files, targetFolder.value).then((r) => {
     result.value = r
+    // 略过不为零时说一声缘由，不让用户猜。
+    if (r.skipped > 0) notify(COPY.importDuplicateHint, 'dusk')
   })
 }
 
@@ -47,13 +51,13 @@ function onFolderChange(e: Event) {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: '待引',
-  reading: '读卷中',
-  parsing: '解卷中',
-  saving: '藏卷中',
-  done: '已藏',
-  skipped: '已略过',
-  error: '有误',
+  pending: COPY.importPending,
+  reading: COPY.importReading,
+  parsing: COPY.importParsing,
+  saving: COPY.importSaving,
+  done: COPY.importStored,
+  skipped: COPY.importSkipped,
+  error: COPY.importError,
 }
 
 const STATUS_CLASS: Record<string, string> = {
@@ -68,8 +72,10 @@ const STATUS_CLASS: Record<string, string> = {
 </script>
 
 <template>
-  <div class="min-h-screen bg-paper text-ink">
-    <header class="flex items-center gap-3 border-b border-line px-6 py-4">
+  <div class="min-h-screen text-ink">
+    <header
+      class="header-fade relative flex items-center gap-3 bg-paper/55 px-6 py-4 backdrop-blur-md"
+    >
       <button
         class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
         @click="$router.push('/')"
@@ -85,10 +91,10 @@ const STATUS_CLASS: Record<string, string> = {
     <main class="mx-auto max-w-2xl p-6">
       <div
         v-if="!library.hasVault"
-        class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-paper-deep/40 py-16 text-center"
+        class="flex flex-col items-center justify-center rounded-2xl bg-paper-deep/40 py-16 text-center shadow-zen-sm"
       >
         <ZIcon name="folder" :size="32" :stroke-width="1" class="text-sandal" />
-        <p class="mt-4 text-sm text-ink-soft">请先打开书库，方能引卷入藏</p>
+        <p class="mt-4 text-sm text-ink-soft">{{ COPY.vaultNotOpen }}</p>
         <button
           class="mt-4 inline-flex items-center gap-2 rounded-full bg-bamboo px-5 py-2 text-sm text-paper transition-opacity hover:opacity-90"
           @click="library.openVault()"
@@ -99,24 +105,26 @@ const STATUS_CLASS: Record<string, string> = {
       </div>
 
       <template v-else>
-        <div
-          class="mb-4 flex items-center gap-3 rounded-xl border border-line bg-paper-deep/40 px-4 py-3"
-        >
+        <!-- 目标分组：自绘下拉，原生 select 不再突兀 -->
+        <div class="mb-4 flex items-center gap-3 rounded-xl bg-paper-deep/40 px-4 py-3">
           <ZIcon name="folder" :size="16" class="shrink-0 text-sandal" />
           <label class="shrink-0 text-sm text-ink-soft">{{ COPY.importTo }}</label>
-          <select
-            v-model="targetFolder"
-            class="min-w-0 flex-1 cursor-pointer rounded-full border border-line bg-paper px-3 py-1.5 text-sm text-ink outline-none transition-colors focus:border-bamboo"
-          >
-            <option value="">{{ COPY.moveToRoot }}</option>
-            <option
-              v-for="f in library.flatFolders"
-              :key="f"
-              :value="f"
+          <div class="relative min-w-0 flex-1">
+            <select
+              v-model="targetFolder"
+              class="w-full cursor-pointer appearance-none rounded-full bg-paper py-1.5 pl-4 pr-9 text-sm text-ink outline-none transition-colors focus:bg-paper-deep"
             >
-              {{ f }}
-            </option>
-          </select>
+              <option value="">{{ COPY.moveToRoot }}</option>
+              <option v-for="f in library.flatFolders" :key="f" :value="f">
+                {{ f }}
+              </option>
+            </select>
+            <span
+              class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-dusk"
+            >
+              <ZIcon name="chevron-down" :size="15" />
+            </span>
+          </div>
         </div>
 
         <div
@@ -125,7 +133,7 @@ const STATUS_CLASS: Record<string, string> = {
           :class="
             isOverDropZone
               ? 'border-bamboo bg-bamboo/10'
-              : 'border-line bg-paper-deep/40'
+              : 'border-line/70 bg-paper-deep/40 hover:border-bamboo/50'
           "
           @click="fileInput?.click()"
         >
@@ -136,14 +144,14 @@ const STATUS_CLASS: Record<string, string> = {
 
         <div class="mt-4 flex flex-wrap gap-3">
           <button
-            class="flex flex-1 items-center justify-center gap-2 rounded-full border border-line bg-paper-deep/60 px-4 py-2.5 text-sm text-ink transition-colors hover:border-bamboo"
+            class="flex flex-1 items-center justify-center gap-2 rounded-full bg-paper-deep/60 px-4 py-2.5 text-sm text-ink shadow-zen-sm transition-colors hover:bg-paper-deep"
             @click="fileInput?.click()"
           >
             <ZIcon name="import" :size="16" />
             {{ COPY.importFileAction }}
           </button>
           <button
-            class="flex flex-1 items-center justify-center gap-2 rounded-full border border-line bg-paper-deep/60 px-4 py-2.5 text-sm text-ink transition-colors hover:border-bamboo"
+            class="flex flex-1 items-center justify-center gap-2 rounded-full bg-paper-deep/60 px-4 py-2.5 text-sm text-ink shadow-zen-sm transition-colors hover:bg-paper-deep"
             @click="folderInput?.click()"
           >
             <ZIcon name="folder" :size="16" />
@@ -172,7 +180,7 @@ const STATUS_CLASS: Record<string, string> = {
           <li
             v-for="(item, i) in items"
             :key="i"
-            class="flex items-center justify-between rounded-lg border border-line bg-paper-deep/40 px-3 py-2 text-sm"
+            class="flex items-center justify-between rounded-lg bg-paper-deep/40 px-3 py-2 text-sm"
           >
             <span class="min-w-0 truncate text-ink">
               <span v-if="item.folderPath" class="text-dusk">
@@ -181,14 +189,14 @@ const STATUS_CLASS: Record<string, string> = {
               {{ item.fileName }}
             </span>
             <span class="shrink-0 text-xs" :class="STATUS_CLASS[item.status]">
-              {{ item.error ?? STATUS_LABEL[item.status] }}
+              {{ item.error ?? item.reason ?? STATUS_LABEL[item.status] }}
             </span>
           </li>
         </ul>
 
         <div
           v-if="result"
-          class="mt-6 rounded-xl border border-line bg-paper-deep/40 p-5 text-center"
+          class="mt-6 rounded-xl bg-paper-deep/40 p-5 text-center shadow-zen-sm"
         >
           <p class="font-serif text-lg text-ink">
             {{ COPY.importDone }} {{ result.imported }} · {{ COPY.importSkipped }}
@@ -205,10 +213,10 @@ const STATUS_CLASS: Record<string, string> = {
 
             <button
               v-if="!importing"
-              class="rounded-full border border-line px-5 py-2 text-sm text-ink-soft transition-colors hover:text-ink"
+              class="rounded-full px-5 py-2 text-sm text-ink-soft transition-colors hover:text-ink"
               @click="result = null"
             >
-              继续引卷
+              {{ COPY.continueImport }}
             </button>
           </div>
         </div>

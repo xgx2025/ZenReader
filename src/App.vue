@@ -4,6 +4,7 @@ import { RouterView } from 'vue-router'
 
 import SettingsPanel from '@/components/settings/SettingsPanel.vue'
 import PaperTexture from '@/components/common/PaperTexture.vue'
+import ToastHost from '@/components/common/ToastHost.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useFullscreen } from '@/composables/useFullscreen'
@@ -42,4 +43,6 @@ onBeforeUnmount(() => {
   <PaperTexture />
 
   <SettingsPanel :open="open" @close="closePanel" />
+
+  <ToastHost />
 </template>

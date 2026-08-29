@@ -44,7 +44,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       >
         <div
           ref="menuEl"
-          class="absolute min-w-40 rounded-lg border border-line bg-paper p-1 shadow-[0_8px_32px_rgba(0,0,0,0.14)]"
+          class="absolute min-w-40 rounded-lg border border-line bg-paper p-1 shadow-zen-md"
           :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
           role="menu"
         >
