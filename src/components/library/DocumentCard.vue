@@ -36,16 +36,16 @@ const finished = computed(() => {
 
 <template>
   <div
-    class="group relative"
+    class="group relative flex"
     @contextmenu.prevent="emit('menu', file, $event.clientX, $event.clientY)"
   >
     <RouterLink
       :to="`/read/${encodeURIComponent(file.relativePath)}`"
-      class="block rounded-lg border border-line bg-paper-deep/50 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:border-bamboo/40 hover:shadow-[0_8px_24px_rgba(0,0,0,0.05)]"
+      class="flex flex-1 flex-col rounded-lg border border-line bg-paper-deep/50 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:border-bamboo/40 hover:shadow-[0_8px_24px_rgba(0,0,0,0.05)]"
       :class="{ 'border-bamboo/30': reading }"
     >
       <div class="flex items-start justify-between gap-2">
-        <h3 class="font-serif text-lg leading-snug text-ink line-clamp-2">
+        <h3 class="min-h-[2lh] font-serif text-lg leading-snug text-ink line-clamp-2">
           {{ title }}
         </h3>
         <span
@@ -64,26 +64,30 @@ const finished = computed(() => {
         {{ meta.excerpt }}
       </p>
 
-      <!-- 在读 progress -->
-      <div v-if="reading" class="mt-3 flex items-center gap-2">
-        <div class="h-0.5 flex-1 overflow-hidden rounded-full bg-line">
-          <div
-            class="h-full rounded-full bg-bamboo/70"
-            :style="{ width: `${Math.round(reading.ratio * 100)}%` }"
-          />
+      <!-- 底部信息：固定占位的进度条 + 元信息，统一贴底对齐 -->
+      <div class="mt-auto pt-4">
+        <div class="flex h-4 items-center gap-2">
+          <template v-if="reading">
+            <div class="h-0.5 flex-1 overflow-hidden rounded-full bg-line">
+              <div
+                class="h-full rounded-full bg-bamboo/70"
+                :style="{ width: `${Math.round(reading.ratio * 100)}%` }"
+              />
+            </div>
+            <span class="shrink-0 text-[11px] tabular-nums text-bamboo">
+              {{ COPY.readingProgress }} {{ Math.round(reading.ratio * 100) }}%
+            </span>
+          </template>
         </div>
-        <span class="shrink-0 text-[11px] tabular-nums text-bamboo">
-          {{ COPY.readingProgress }} {{ Math.round(reading.ratio * 100) }}%
-        </span>
-      </div>
 
-      <div class="mt-4 flex items-center gap-3 text-xs text-ink-soft">
-        <span v-if="folderPath" class="truncate text-sandal">{{ folderPath }}</span>
-        <template v-if="meta">
-          <span>{{ meta.wordCount }} 字</span>
-          <span>{{ meta.readingTime }} 分</span>
-        </template>
-        <span v-if="mtime" class="ml-auto shrink-0 text-dusk">{{ mtime }}</span>
+        <div class="mt-3 flex items-center gap-3 text-xs text-ink-soft">
+          <span v-if="folderPath" class="truncate text-sandal">{{ folderPath }}</span>
+          <template v-if="meta">
+            <span>{{ meta.wordCount }} 字</span>
+            <span>{{ meta.readingTime }} 分</span>
+          </template>
+          <span v-if="mtime" class="ml-auto shrink-0 text-dusk">{{ mtime }}</span>
+        </div>
       </div>
     </RouterLink>
 
