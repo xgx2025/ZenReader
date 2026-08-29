@@ -12,6 +12,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ZIcon from '@/components/common/ZIcon.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
 import ReminderToast from '@/components/reader/ReminderToast.vue'
+import IncenseControl from '@/components/reader/IncenseControl.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
 
@@ -40,16 +41,7 @@ const settings = useSettingsStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen()
-const {
-  lit,
-  start,
-  stop,
-  ignite,
-  extinguish,
-  preHintActive,
-  remainingText,
-  burnedText,
-} = useZenClock()
+const { start, stop, awayNotice, clearAwayNotice } = useZenClock()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
@@ -102,32 +94,27 @@ const anchors = computed<AppliedAnchor[]>(() =>
 
 const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
 
-// 禅钟：香形图标的视觉三态与悬停文案。
-const incenseClass = computed(() => {
-  if (!lit.value) return 'text-dusk opacity-40 hover:text-sandal hover:opacity-70'
-  if (preHintActive.value) return 'zen-breathe text-sandal'
-  return 'zen-breathe text-sandal opacity-60'
-})
-
-const incenseTitle = computed(() => {
-  if (!lit.value) return COPY.igniteHint
-  if (preHintActive.value) return remainingText.value
-  return `${burnedText.value} · ${remainingText.value}`
-})
-
+// 香已点燃提示（由 IncenseControl 点香时触发）。
 const showLitNotice = ref(false)
+let litNoticeTimer: ReturnType<typeof setTimeout> | null = null
 
-function onIncenseClick() {
-  if (lit.value) {
-    extinguish()
-  } else {
-    ignite()
-    showLitNotice.value = true
-    setTimeout(() => {
-      showLitNotice.value = false
-    }, 1600)
-  }
+const litNoticeText = computed(
+  () => `${COPY.litNotice} · ${settings.reminder.intervalMinutes}${COPY.minutes}`,
+)
+
+function onIncenseIgnited() {
+  showLitNotice.value = true
+  if (litNoticeTimer) clearTimeout(litNoticeTimer)
+  litNoticeTimer = setTimeout(() => {
+    showLitNotice.value = false
+  }, 2200)
 }
+
+// 离席自动熄香提示：回来时轻声解释香为何灭了。
+watch(awayNotice, (v) => {
+  if (!v) return
+  window.setTimeout(() => clearAwayNotice(), 2600)
+})
 
 // TOC anchors by heading id, so the active one can be kept in view.
 const tocItemEls = new Map<string, HTMLElement>()
@@ -389,15 +376,11 @@ watch(() => route.params.path, loadDocument)
       :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
     >
       <div class="flex min-w-0 items-center gap-1">
-        <button
+        <IncenseControl
           v-if="settings.reminder.enabled"
-          class="flex h-9 w-5 shrink-0 items-center justify-center transition-colors"
-          :class="incenseClass"
-          :title="incenseTitle"
-          @click="onIncenseClick"
-        >
-          <ZIcon name="incense" :size="14" />
-        </button>
+          variant="toolbar"
+          @ignite="onIncenseIgnited"
+        />
         <button
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
           @click="router.push('/')"
@@ -577,6 +560,25 @@ watch(() => route.params.path, loadDocument)
       </p>
     </Transition>
 
+    <!-- 禅境迷你香 -- header 已隐，唯香常随 -->
+    <div
+      v-if="settings.zenMode && settings.reminder.enabled"
+      class="fixed right-4 top-4 z-30"
+    >
+      <IncenseControl variant="zen" @ignite="onIncenseIgnited" />
+    </div>
+
+    <!-- 离席熄香 hint -->
+    <Transition name="fade">
+      <p
+        v-if="awayNotice"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+      >
+        <ZIcon name="incense" :size="13" class="text-dusk" />
+        {{ COPY.awayNotice }}
+      </p>
+    </Transition>
+
     <!-- 续读 hint -->
     <Transition name="fade">
       <p
@@ -595,7 +597,7 @@ watch(() => route.params.path, loadDocument)
         class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
       >
         <ZIcon name="incense" :size="13" class="text-sandal" />
-        {{ COPY.litNotice }}
+        {{ litNoticeText }}
       </p>
     </Transition>
 

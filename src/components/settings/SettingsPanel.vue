@@ -76,9 +76,21 @@ const ACTIONS: { key: ReminderAction; label: string }[] = [
   { key: 'breathe', label: COPY.actBreathe },
 ]
 
+/** 香长预设：小憩 / 一炷 / 深读 / 长卷。 */
+const PRESETS: { minutes: number; label: string }[] = [
+  { minutes: 15, label: COPY.reminderPreset },
+  { minutes: 25, label: COPY.reminderPresetIncense },
+  { minutes: 45, label: COPY.reminderPresetDeep },
+  { minutes: 60, label: COPY.reminderPresetLong },
+]
+
 function onReminderInterval(e: Event) {
   const value = Number((e.target as HTMLInputElement).value)
   settings.updateReminder({ intervalMinutes: value })
+}
+
+function setPreset(minutes: number) {
+  settings.updateReminder({ intervalMinutes: minutes })
 }
 
 function toggleAction(action: ReminderAction) {
@@ -242,6 +254,22 @@ function toggleAction(action: ReminderAction) {
                   {{ COPY.reminderIntervalUnit }}
                 </span>
               </div>
+              <div class="mt-2 flex gap-2">
+                <button
+                  v-for="p in PRESETS"
+                  :key="p.minutes"
+                  type="button"
+                  class="flex-1 rounded-full border px-2 py-1.5 text-xs transition-colors"
+                  :class="
+                    settings.reminder.intervalMinutes === p.minutes
+                      ? 'border-bamboo bg-bamboo/15 text-ink'
+                      : 'border-line text-ink-soft hover:border-bamboo'
+                  "
+                  @click="setPreset(p.minutes)"
+                >
+                  {{ p.label }}
+                </button>
+              </div>
               <input
                 type="range"
                 class="mt-2 w-full accent-bamboo"
@@ -295,6 +323,36 @@ function toggleAction(action: ReminderAction) {
                   class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
                   :class="
                     settings.reminder.preHint
+                      ? 'left-[1.15rem] bg-bamboo'
+                      : 'left-0.5 bg-dusk'
+                  "
+                />
+              </button>
+            </div>
+
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <div>
+                <span class="text-xs text-ink-soft">{{ COPY.reminderChime }}</span>
+                <p class="mt-0.5 text-[11px] leading-snug text-dusk">
+                  {{ COPY.reminderChimeHint }}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="settings.reminder.chime"
+                class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
+                :class="
+                  settings.reminder.chime
+                    ? 'border-bamboo bg-bamboo/25'
+                    : 'border-line bg-paper-deep'
+                "
+                @click="settings.updateReminder({ chime: !settings.reminder.chime })"
+              >
+                <span
+                  class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                  :class="
+                    settings.reminder.chime
                       ? 'left-[1.15rem] bg-bamboo'
                       : 'left-0.5 bg-dusk'
                   "

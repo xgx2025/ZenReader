@@ -11,6 +11,18 @@ import {
 const STORAGE_KEY = 'zenreader:settings'
 
 /**
+ * 浅合并之上，对 reminder 再深合并一层：旧版本持久化里存量的 reminder 对象
+ * 会整体覆盖默认值，新增字段（如 chime）若无深合并将悄悄丢失。
+ */
+function mergeSettings(parsed: Partial<ReaderSettings>): ReaderSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...parsed,
+    reminder: { ...DEFAULT_SETTINGS.reminder, ...(parsed.reminder ?? {}) },
+  }
+}
+
+/**
  * Browser-only fallback: previous session's settings live in localStorage.
  * In the Tauri desktop shell the settings file is the source of truth and
  * localStorage is never read (except as a one-time migration source).
@@ -19,7 +31,7 @@ function loadLocal(): ReaderSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULT_SETTINGS }
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<ReaderSettings>) }
+    return mergeSettings(JSON.parse(raw) as Partial<ReaderSettings>)
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -43,11 +55,11 @@ export const useSettingsStore = defineStore('settings', {
       try {
         const raw = await nativeFs.readSettings()
         if (raw != null) {
-          this.$patch({ ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<ReaderSettings>) })
+          this.$patch(mergeSettings(JSON.parse(raw) as Partial<ReaderSettings>))
         } else {
           const legacy = localStorage.getItem(STORAGE_KEY)
           if (legacy) {
-            this.$patch({ ...DEFAULT_SETTINGS, ...(JSON.parse(legacy) as Partial<ReaderSettings>) })
+            this.$patch(mergeSettings(JSON.parse(legacy) as Partial<ReaderSettings>))
           }
           await this.persist()
         }

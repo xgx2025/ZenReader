@@ -16,6 +16,8 @@ export interface ReminderSettings {
   actions: ReminderAction[]
   /** 燃香预提示：香将尽时在工具栏显一星极淡微光，悬停方见剩余。 */
   preHint: boolean
+  /** 香尽钟音：香燃尽时轻声颂钵音（WebAudio 合成，无音频文件）。 */
+  chime: boolean
 }
 
 export interface ReaderSettings {
@@ -47,6 +49,7 @@ export const DEFAULT_REMINDER: ReminderSettings = {
   intervalMinutes: 30,
   actions: ['stretch', 'water', 'eyes', 'breathe'],
   preHint: true,
+  chime: true,
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {

@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 
 import { useSettingsStore } from '@/stores/settings'
 import { COPY } from '@/lib/copy'
+import { playIncenseChime, prepareChime } from '@/lib/chime'
 import type { ReminderAction } from '@/types/settings'
 
 /**
@@ -41,6 +42,8 @@ const elapsedMs = ref(0)
 const reminderOpen = ref(false)
 const reminderLevel = ref<1 | 2>(1)
 const reminderAction = ref<ReminderAction>('stretch')
+/** 离席自动熄香后待展示的提示（窗口重新可见时由视图消费）。 */
+const awayHintPending = ref(false)
 
 // 仅被 tick 命令式读取，无需响应式；用普通变量避免 mousemove 触发无谓更新。
 let lastActivityAt = Date.now()
@@ -62,6 +65,37 @@ function onActivity() {
 
 function resetIncense() {
   elapsedMs.value = 0
+}
+
+/** 熄香原因：决定是否需要向用户解释。 */
+type ExtinguishReason = 'manual' | 'burnt' | 'away'
+
+/**
+ * 离席提示：away 熄香若发生在窗口隐藏期间，先挂起，待窗口重新可见时
+ * 再置 awayNotice（由视图渲染「离席片刻，香已熄」）。
+ */
+const awayNotice = ref(false)
+let awayPending = false
+
+function showAwayNoticeIfVisible() {
+  if (!document.hidden) {
+    awayNotice.value = true
+    awayPending = false
+  } else {
+    awayPending = true
+  }
+}
+
+function onVisibilityChange() {
+  if (!document.hidden && awayPending) {
+    awayPending = false
+    awayNotice.value = true
+  }
+}
+
+/** 视图展示完毕后清掉提示。 */
+function clearAwayNotice() {
+  awayNotice.value = false
 }
 
 /** 从已勾选的动作中轮换取一个（避免连续重复）。 */
@@ -86,23 +120,30 @@ function dismiss() {
 function ignite() {
   const settings = useSettingsStore()
   if (!settings.reminder.enabled) return
+  // 借用户手势解锁 AudioContext，香尽钟音才发得出声。
+  if (settings.reminder.chime) prepareChime()
+  awayNotice.value = false
+  awayPending = false
   lit.value = true
   resetIncense()
 }
 
 /** 用户手动熄香（或香尽自动熄灭），回到未点燃态。 */
-function extinguish() {
+function extinguish(reason: ExtinguishReason = 'manual') {
   lit.value = false
   resetIncense()
   dismiss()
+  if (reason === 'away') showAwayNoticeIfVisible()
 }
 
 function fire() {
+  const settings = useSettingsStore()
   reminderAction.value = nextAction()
   reminderLevel.value = 1
   reminderOpen.value = true
   lit.value = false // 香尽自熄
   resetIncense()
+  if (settings.reminder.chime) playIncenseChime()
 
   if (escalateTimer) clearTimeout(escalateTimer)
   escalateTimer = setTimeout(() => {
@@ -127,7 +168,7 @@ function tick() {
   if (document.hidden) {
     if (hiddenSince === 0) hiddenSince = now
     if (now - hiddenSince >= HIDDEN_RESET_MS) {
-      extinguish()
+      extinguish('away')
       hiddenSince = now // 避免每 tick 重复
     }
     return
@@ -136,7 +177,7 @@ function tick() {
 
   // 前台但长时间零操作 → 离席。
   if (now - lastActivityAt >= IDLE_RESET_MS) {
-    extinguish()
+    extinguish('away')
     return
   }
 
@@ -151,6 +192,7 @@ function start() {
   for (const e of ACTIVITY_EVENTS) {
     window.addEventListener(e, onActivity, { passive: true, capture: true })
   }
+  document.addEventListener('visibilitychange', onVisibilityChange)
   tickTimer = setInterval(tick, TICK_MS)
 }
 
@@ -161,8 +203,11 @@ function stop() {
   for (const e of ACTIVITY_EVENTS) {
     window.removeEventListener(e, onActivity, { capture: true })
   }
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   if (tickTimer) clearInterval(tickTimer)
   tickTimer = null
+  awayPending = false
+  awayNotice.value = false
   extinguish()
 }
 
@@ -174,6 +219,13 @@ const preHintActive = computed(() => {
   // 预提示窗口取「5 分钟」与「香长 1/4」的较小值——香长很短时，微光不至于全程亮。
   const hint = Math.min(PRE_HINT_MS, interval / 4)
   return elapsedMs.value > 0 && elapsedMs.value >= interval - hint
+})
+
+/** 燃烧进度（0-1），供进度环等可视化使用。 */
+const progress = computed(() => {
+  const interval = intervalMs()
+  if (interval <= 0) return 0
+  return Math.min(1, elapsedMs.value / interval)
 })
 
 /** 剩余分钟文本（悬停提示）。 */
@@ -193,11 +245,14 @@ export function useZenClock() {
   return {
     lit,
     preHintActive,
+    progress,
     remainingText,
     burnedText,
     reminderOpen,
     reminderLevel,
     reminderAction,
+    awayNotice,
+    clearAwayNotice,
     start,
     stop,
     ignite,
