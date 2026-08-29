@@ -12,3 +12,5 @@ src-tauri/gen/
 
 # 设计文档，不入库
 doc/
+# Claude AI 会话缓存
+.claude/
