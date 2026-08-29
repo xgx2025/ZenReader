@@ -3,7 +3,12 @@ import { ref, watch } from 'vue'
 
 import { COPY } from '@/lib/copy'
 
-const props = defineProps<{ open: boolean; quote: string }>()
+const props = defineProps<{
+  open: boolean
+  quote: string
+  initial: string
+  title: string
+}>()
 const emit = defineEmits<{ save: [text: string]; cancel: [] }>()
 
 const text = ref('')
@@ -11,7 +16,7 @@ const text = ref('')
 watch(
   () => props.open,
   (open) => {
-    if (open) text.value = ''
+    if (open) text.value = props.initial
   },
 )
 
@@ -33,8 +38,11 @@ function save() {
           class="w-full max-w-md rounded-xl border border-line bg-paper shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
         >
           <div class="p-5">
-            <h3 class="font-serif text-lg text-ink">{{ COPY.selectionNote }}</h3>
-            <blockquote class="mt-3 border-l-2 border-bamboo pl-3 text-sm leading-relaxed text-ink-soft">
+            <h3 class="font-serif text-lg text-ink">{{ title }}</h3>
+            <blockquote
+              v-if="quote"
+              class="mt-3 border-l-2 border-bamboo pl-3 text-sm leading-relaxed text-ink-soft"
+            >
               {{ quote }}
             </blockquote>
             <textarea

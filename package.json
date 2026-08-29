@@ -8,11 +8,12 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
-    "test:unit": "vitest"
+    "test:unit": "vitest",
+    "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
     "@vueuse/core": "^12.8.0",
-    "dexie": "^4.0.11",
     "dompurify": "^3.2.4",
     "js-yaml": "^4.1.0",
     "markdown-it": "^14.1.0",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/js-yaml": "^4.0.9",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.13.0",

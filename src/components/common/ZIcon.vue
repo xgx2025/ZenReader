@@ -8,6 +8,7 @@ export type IconName =
   | 'import'
   | 'folder'
   | 'note'
+  | 'edit'
   | 'delete'
   | 'settings'
   | 'zen'
@@ -17,6 +18,16 @@ export type IconName =
   | 'minus'
   | 'sun'
   | 'moon'
+  | 'refresh'
+  | 'expand'
+  | 'shrink'
+  | 'more'
+  | 'bell'
+  | 'incense'
+  | 'droplet'
+  | 'eye'
+  | 'breath'
+  | 'figure'
 
 const props = withDefaults(
   defineProps<{ name: IconName; size?: number; strokeWidth?: number }>(),
@@ -36,6 +47,8 @@ const ICONS: Record<IconName, string> = {
     '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   note:
     '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  edit:
+    '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
   delete:
     '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
   settings:
@@ -47,6 +60,16 @@ const ICONS: Record<IconName, string> = {
   minus: '<path d="M5 12h14"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.3 17.7-1.4 1.4"/><path d="m19.1 4.9-1.4 1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',
+  expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  shrink: '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
+  more: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  incense: '<path d="M12 20V8"/><path d="M12 8c.6-.9.6-1.8 0-2.6"/><path d="M9 20h6"/>',
+  droplet: '<path d="M12 4C12 4 7 10 7 14a5 5 0 0 0 10 0c0-4-5-10-5-10z"/>',
+  eye: '<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
+  breath: '<path d="M12.5 6.5A2.2 2.2 0 1 1 10.5 10H3"/><path d="M12.5 14.5A2.2 2.2 0 1 0 10.5 18.5H3"/>',
+  figure: '<circle cx="12" cy="5" r="2"/><path d="M12 9v11"/><path d="M12 12l-4 2.5"/><path d="M12 12l4 2.5"/>',
 }
 
 const path = computed(() => ICONS[props.name] ?? '')

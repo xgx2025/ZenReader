@@ -32,3 +32,58 @@
 .zen-breathe {
   animation: zen-breathe 4s var(--ease-zen) infinite;
 }
+
+/* 燃香：火光明灭有息，香将尽时转急。 */
+@keyframes incense-ember {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.incense-ember {
+  animation: incense-ember 2.8s var(--ease-zen) infinite;
+}
+.incense-ember-hot {
+  animation-duration: 1.1s;
+}
+
+/* 燃香：青烟袅袅，两缕错拍而上。 */
+@keyframes incense-smoke {
+  0% {
+    transform: translateY(1px) translateX(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-5px) translateX(0.8px);
+    opacity: 0;
+  }
+}
+.incense-smoke {
+  animation: incense-smoke 3.8s var(--ease-zen) infinite;
+}
+.incense-smoke-late {
+  animation-delay: -1.9s;
+}
+
+/* 觉悟回看：跳转正文时的高亮脉冲（驻足的沙色 → 觉悟的竹色）。 */
+@keyframes hl-pulse {
+  0%,
+  100% {
+    background: color-mix(in srgb, var(--sandal) 22%, transparent);
+  }
+  50% {
+    background: color-mix(in srgb, var(--bamboo) 55%, transparent);
+  }
+}
+.zen-prose mark.hl-pulse {
+  animation: hl-pulse 1.2s var(--ease-zen);
+}

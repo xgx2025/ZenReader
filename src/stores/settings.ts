@@ -1,29 +1,83 @@
 import { defineStore } from 'pinia'
 
+import { nativeFs, isTauri } from '@/lib/native'
 import {
   DEFAULT_SETTINGS,
   type ReaderSettings,
+  type ReminderSettings,
   type ThemeName,
 } from '@/types/settings'
 
 const STORAGE_KEY = 'zenreader:settings'
 
-function load(): ReaderSettings {
+/**
+ * 浅合并之上，对 reminder 再深合并一层：旧版本持久化里存量的 reminder 对象
+ * 会整体覆盖默认值，新增字段（如 chime）若无深合并将悄悄丢失。
+ */
+function mergeSettings(parsed: Partial<ReaderSettings>): ReaderSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...parsed,
+    reminder: { ...DEFAULT_SETTINGS.reminder, ...(parsed.reminder ?? {}) },
+  }
+}
+
+/**
+ * Browser-only fallback: previous session's settings live in localStorage.
+ * In the Tauri desktop shell the settings file is the source of truth and
+ * localStorage is never read (except as a one-time migration source).
+ */
+function loadLocal(): ReaderSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULT_SETTINGS }
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<ReaderSettings>) }
+    return mergeSettings(JSON.parse(raw) as Partial<ReaderSettings>)
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
 }
 
 export const useSettingsStore = defineStore('settings', {
-  state: (): ReaderSettings => load(),
+  state: (): ReaderSettings => (isTauri() ? { ...DEFAULT_SETTINGS } : loadLocal()),
 
   actions: {
+    /**
+     * Load persisted settings exactly once, before the app mounts.
+     * - Tauri: read `settings.json` from the app config dir; on first run,
+     *   migrate any legacy localStorage settings into the file.
+     * - Browser: keep the synchronous localStorage snapshot already in state.
+     */
+    async init() {
+      if (!isTauri()) {
+        this.applyAll()
+        return
+      }
+      try {
+        const raw = await nativeFs.readSettings()
+        if (raw != null) {
+          this.$patch(mergeSettings(JSON.parse(raw) as Partial<ReaderSettings>))
+        } else {
+          const legacy = localStorage.getItem(STORAGE_KEY)
+          if (legacy) {
+            this.$patch(mergeSettings(JSON.parse(legacy) as Partial<ReaderSettings>))
+          }
+          await this.persist()
+        }
+      } catch (e) {
+        console.error('[zenreader] load settings failed', e)
+      }
+      this.applyAll()
+    },
+
+    /** Persist to the settings file (Tauri) or localStorage (browser). */
     persist() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.$state))
+      const json = JSON.stringify(this.$state)
+      if (isTauri()) {
+        return nativeFs.writeSettings(json).catch((e) => {
+          console.error('[zenreader] write settings failed', e)
+        })
+      }
+      localStorage.setItem(STORAGE_KEY, json)
     },
 
     applyTheme() {
@@ -58,9 +112,20 @@ export const useSettingsStore = defineStore('settings', {
       this.persist()
     },
 
+    setVaultPath(path: string) {
+      this.vaultPath = path
+      this.persist()
+    },
+
     update(patch: Partial<ReaderSettings>) {
       Object.assign(this, patch)
       this.applyAll()
+      this.persist()
+    },
+
+    /** 更新禅钟提醒配置（不影响主题/排版，仅持久化）。 */
+    updateReminder(patch: Partial<ReminderSettings>) {
+      this.reminder = { ...this.reminder, ...patch }
       this.persist()
     },
   },

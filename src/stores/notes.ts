@@ -1,34 +1,53 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { noteRepo } from '@/lib/db/notes'
+import { readNotesIndex, writeNotesIndex } from '@/lib/vault'
+import { useSettingsStore } from '@/stores/settings'
 import type { Note } from '@/types/note'
 
 export const useNotesStore = defineStore('notes', () => {
   const notes = ref<Note[]>([])
-  const documentId = ref('')
+  const relativePath = ref('')
 
-  async function load(id: string) {
-    documentId.value = id
-    notes.value = await noteRepo.byDocument(id)
+  const settings = useSettingsStore()
+
+  async function load(relPath: string) {
+    relativePath.value = relPath
+    const index = await readNotesIndex(settings.vaultPath)
+    notes.value = index[relPath] ?? []
   }
 
   async function add(note: Note) {
-    await noteRepo.add(note)
-    notes.value = await noteRepo.byDocument(note.documentId)
+    const index = await readNotesIndex(settings.vaultPath)
+    const list = [...(index[note.relativePath] ?? []), note]
+    index[note.relativePath] = list
+    await writeNotesIndex(settings.vaultPath, index)
+    notes.value = list
   }
 
   async function remove(id: string) {
-    await noteRepo.remove(id)
-    if (documentId.value) {
-      notes.value = await noteRepo.byDocument(documentId.value)
-    }
+    const index = await readNotesIndex(settings.vaultPath)
+    const list = (index[relativePath.value] ?? []).filter((n) => n.id !== id)
+    index[relativePath.value] = list
+    await writeNotesIndex(settings.vaultPath, index)
+    notes.value = list
+  }
+
+  async function update(id: string, patch: Partial<Pick<Note, 'note' | 'kind'>>) {
+    const ts = new Date().toISOString()
+    const index = await readNotesIndex(settings.vaultPath)
+    const list = (index[relativePath.value] ?? []).map((n) =>
+      n.id === id ? { ...n, ...patch, updatedAt: ts } : n,
+    )
+    index[relativePath.value] = list
+    await writeNotesIndex(settings.vaultPath, index)
+    notes.value = list
   }
 
   function clear() {
     notes.value = []
-    documentId.value = ''
+    relativePath.value = ''
   }
 
-  return { notes, documentId, load, add, remove, clear }
+  return { notes, relativePath, load, add, update, remove, clear }
 })

@@ -1,36 +1,10 @@
 import { ref } from 'vue'
 
-import { renderMarkdown } from '@/lib/markdown/parser'
-import { parseFrontmatter } from '@/lib/markdown/frontmatter'
-import {
-  computeReadingTime,
-  countWords,
-  makeExcerpt,
-} from '@/lib/markdown/structure'
-import { hashString } from '@/lib/hash'
-import { documentRepo } from '@/lib/db/documents'
-import type { Document } from '@/types/document'
+import { nativeFs } from '@/lib/native'
+import { joinPath, vaultFile, folderPathFromRelative } from '@/lib/vault'
+import { useSettingsStore } from '@/stores/settings'
+import { useLibraryStore } from '@/stores/library'
 import type { ImportItem, ImportResult } from '@/types/import'
-
-const WRITE_CHUNK = 100
-
-function now(): string {
-  return new Date().toISOString()
-}
-
-function folderPathOf(file: File & { webkitRelativePath?: string }): string {
-  const rel = file.webkitRelativePath
-  if (!rel) return ''
-  const parts = rel.split('/')
-  parts.pop() // drop the filename
-  return parts.join('/')
-}
-
-function titleFrom(frontmatter: Record<string, unknown>, fileName: string): string {
-  const t = frontmatter.title
-  if (typeof t === 'string' && t.trim()) return t.trim()
-  return fileName.replace(/\.md$/i, '')
-}
 
 async function readFileAsText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer()
@@ -48,67 +22,53 @@ async function readFileAsText(file: File): Promise<string> {
   return text
 }
 
-function buildDocument(
-  source: string,
-  file: File & { webkitRelativePath?: string },
-): Document {
-  const { data, content } = parseFrontmatter(source)
-  const { html, plainText } = renderMarkdown(content)
-  const wordCount = countWords(plainText)
-  const ts = now()
-
-  return {
-    id: crypto.randomUUID(),
-    title: titleFrom(data, file.name),
-    source,
-    html,
-    plainText,
-    sourceHash: hashString(source),
-    frontmatter: data,
-    excerpt: makeExcerpt(plainText),
-    wordCount,
-    readingTime: computeReadingTime(wordCount),
-    fileName: file.name,
-    folderPath: folderPathOf(file),
-    createdAt: ts,
-    updatedAt: ts,
-    lastOpenedAt: ts,
-  }
+/** Relative target within the vault: folder-picked files keep their structure. */
+function relativePathFor(file: File & { webkitRelativePath?: string }): string {
+  return file.webkitRelativePath || file.name
 }
 
+/**
+ * Copy external `.md` files into the vault — the vault is the source of
+ * truth, so "import" now means writing the file onto disk inside it.
+ */
 export function useFileImport() {
+  const settings = useSettingsStore()
+  const library = useLibraryStore()
+
   const items = ref<ImportItem[]>([])
   const importing = ref(false)
 
-  async function importFiles(files: File[]): Promise<ImportResult> {
+  async function importFiles(
+    files: File[],
+    targetFolder = '',
+  ): Promise<ImportResult> {
     const typed = files as (File & { webkitRelativePath?: string })[]
     const mdFiles = typed.filter((f) => /\.md$/i.test(f.name))
     const skippedByExtension = typed.length - mdFiles.length
 
-    items.value = mdFiles.map((f) => ({
-      fileName: f.name,
-      folderPath: folderPathOf(f),
+    const existing = new Set(library.files.map((f) => f.relativePath))
+    const entries = mdFiles.map((file) => {
+      const relPath = joinPath(targetFolder, relativePathFor(file))
+      return { file, relPath, folderPath: folderPathFromRelative(relPath) }
+    })
+
+    items.value = entries.map((e) => ({
+      fileName: e.file.name,
+      folderPath: e.folderPath,
       status: 'pending' as const,
     }))
 
     importing.value = true
 
-    // Dedupe: skip files already present at the same folder+name.
-    const existing = await documentRepo.getAll()
-    const existingKeys = new Set(
-      existing.map((d) => `${d.folderPath}/${d.fileName}`),
-    )
-
-    const docs: Document[] = []
-    const errors: ImportResult['errors'] = []
+    let imported = 0
     let skipped = skippedByExtension
+    const errors: ImportResult['errors'] = []
 
-    for (let i = 0; i < mdFiles.length; i++) {
-      const file = mdFiles[i]
+    for (let i = 0; i < entries.length; i++) {
+      const { file, relPath } = entries[i]
       const item = items.value[i]
-      const key = `${folderPathOf(file)}/${file.name}`
 
-      if (existingKeys.has(key)) {
+      if (existing.has(relPath)) {
         item.status = 'skipped'
         skipped++
         continue
@@ -116,12 +76,11 @@ export function useFileImport() {
 
       item.status = 'reading'
       try {
-        const source = await readFileAsText(file)
-        item.status = 'parsing'
-        const doc = buildDocument(source, file)
+        const content = await readFileAsText(file)
         item.status = 'saving'
-        docs.push(doc)
+        await nativeFs.writeFile(vaultFile(settings.vaultPath, relPath), content)
         item.status = 'done'
+        imported++
       } catch (e) {
         item.status = 'error'
         item.error = e instanceof Error ? e.message : String(e)
@@ -129,12 +88,9 @@ export function useFileImport() {
       }
     }
 
-    for (let i = 0; i < docs.length; i += WRITE_CHUNK) {
-      await documentRepo.bulkAdd(docs.slice(i, i + WRITE_CHUNK))
-    }
-
     importing.value = false
-    return { imported: docs.length, skipped, errors }
+    await library.refresh()
+    return { imported, skipped, errors }
   }
 
   return { items, importing, importFiles }
