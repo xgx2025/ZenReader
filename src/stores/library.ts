@@ -28,6 +28,8 @@ export interface IndexedMeta {
   fullText: string
   wordCount: number
   readingTime: number
+  /** 索引时的文件修改时间：刷新时相同则沿用，不再重复解析。 */
+  mtime: number
 }
 
 function collectFolderPaths(nodes: FolderNode[], acc: string[]): void {
@@ -157,7 +159,12 @@ export const useLibraryStore = defineStore('library', () => {
       const listing = await nativeFs.readVault(settings.vaultPath)
       files.value = listing.files
       dirs.value = listing.dirs
-      index.value = {}
+      // 增量索引：只清掉已消失的文件，未变更者沿用旧索引——
+      // 窗口聚焦等频繁刷新不再让卡片元信息闪烁。
+      const live = new Set(listing.files.map((f) => f.relativePath))
+      for (const key of Object.keys(index.value)) {
+        if (!live.has(key)) delete index.value[key]
+      }
       indexVault(listing.files)
     } catch (e) {
       console.error('[zenreader] read_vault failed', e)
@@ -221,6 +228,8 @@ export const useLibraryStore = defineStore('library', () => {
     const gen = ++indexGen
     for (const f of list) {
       if (gen !== indexGen) return // superseded by a newer refresh
+      // mtime 未变即内容未变，直接沿用已有索引。
+      if (index.value[f.relativePath]?.mtime === f.mtime) continue
       try {
         const source = await nativeFs.readFile(f.path)
         const { data, content } = parseFrontmatter(source)
@@ -232,6 +241,7 @@ export const useLibraryStore = defineStore('library', () => {
           fullText: plainText,
           wordCount,
           readingTime: computeReadingTime(wordCount),
+          mtime: f.mtime,
         }
       } catch {
         // leave unindexed; the card falls back to the file name

@@ -157,6 +157,23 @@ function renderProse() {
   highlightCodeBlocks(el, settings.theme)
 }
 
+/** 局部更新：只为此条笔记包一层 <mark>，不整篇重建、不重跑代码高亮。 */
+function applyNoteAnchor(noteId: string, anchor: HighlightAnchor) {
+  const el = proseEl.value
+  if (!el) return
+  applyAnchors(el, [{ noteId, anchor }])
+}
+
+/** 局部更新：拆掉此条笔记的高亮，并把被分割的文本节点缝回去。 */
+function removeNoteAnchor(id: string) {
+  const mark = proseEl.value?.querySelector(`mark.hl[data-note-id="${id}"]`)
+  if (!mark?.parentNode) return
+  const parent = mark.parentNode
+  while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
+  parent.removeChild(mark)
+  parent.normalize()
+}
+
 async function loadDocument() {
   // Vue Router already decodes path params; relativePath may contain `/`.
   const relPath = route.params.path as string
@@ -230,10 +247,11 @@ function makeFreeNote(note: string): Note {
 async function onHighlight() {
   const cap = capture.value
   if (!cap) return
+  const note = makeNote(cap.anchor, '', 'highlight')
   try {
-    await notesStore.add(makeNote(cap.anchor, '', 'highlight'))
+    await notesStore.add(note)
+    applyNoteAnchor(note.id, cap.anchor)
     dismiss()
-    renderProse()
   } catch {
     notify(COPY.opFailed, 'sandal')
   }
@@ -279,14 +297,16 @@ async function onSaveNote(text: string) {
   if (!c) return
   try {
     if (c.noteId) {
+      // 编辑只改心得文本，锚点不变——正文无需任何重渲染。
       const target = notesStore.notes.find((x) => x.id === c.noteId)
       await notesStore.update(
         c.noteId,
         target?.kind === 'highlight' ? { note: text, kind: 'note' } : { note: text },
       )
     } else if (c.anchor) {
-      await notesStore.add(makeNote(c.anchor, text, 'note'))
-      renderProse()
+      const note = makeNote(c.anchor, text, 'note')
+      await notesStore.add(note)
+      applyNoteAnchor(note.id, c.anchor)
     } else {
       await notesStore.add(makeFreeNote(text))
     }
@@ -311,7 +331,7 @@ async function onConfirmDelete() {
   try {
     await notesStore.remove(n.id)
     if (activeNoteId.value === n.id) activeNoteId.value = null
-    renderProse()
+    removeNoteAnchor(n.id)
   } catch {
     notify(COPY.opFailed, 'sandal')
   }

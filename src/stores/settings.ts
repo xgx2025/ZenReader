@@ -10,6 +10,10 @@ import {
 
 const STORAGE_KEY = 'zenreader:settings'
 
+/** 拖动滑杆时每个刻度都会触发写入，防抖合并为一次落盘。 */
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+let persistFlushWired = false
+
 /**
  * 浅合并之上，对 reminder 再深合并一层：旧版本持久化里存量的 reminder 对象
  * 会整体覆盖默认值，新增字段（如 chime）若无深合并将悄悄丢失。
@@ -66,7 +70,24 @@ export const useSettingsStore = defineStore('settings', {
       } catch (e) {
         console.error('[zenreader] load settings failed', e)
       }
+      this.wirePersistFlush()
       this.applyAll()
+    },
+
+    /** 关窗或切后台前把尚未落盘的防抖写入冲刷掉，最后一次调整不丢。 */
+    wirePersistFlush() {
+      if (persistFlushWired) return
+      persistFlushWired = true
+      const flush = () => {
+        if (!persistTimer) return
+        clearTimeout(persistTimer)
+        persistTimer = null
+        this.persist()
+      }
+      window.addEventListener('beforeunload', flush)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flush()
+      })
     },
 
     /** Persist to the settings file (Tauri) or localStorage (browser). */
@@ -78,6 +99,15 @@ export const useSettingsStore = defineStore('settings', {
         })
       }
       localStorage.setItem(STORAGE_KEY, json)
+    },
+
+    /** Debounced persist：高频更新（滑杆拖动）只落最后一次。 */
+    persistSoon() {
+      if (persistTimer) clearTimeout(persistTimer)
+      persistTimer = setTimeout(() => {
+        persistTimer = null
+        this.persist()
+      }, 400)
     },
 
     applyTheme() {
@@ -120,13 +150,13 @@ export const useSettingsStore = defineStore('settings', {
     update(patch: Partial<ReaderSettings>) {
       Object.assign(this, patch)
       this.applyAll()
-      this.persist()
+      this.persistSoon()
     },
 
     /** 更新禅钟提醒配置（不影响主题/排版，仅持久化）。 */
     updateReminder(patch: Partial<ReminderSettings>) {
       this.reminder = { ...this.reminder, ...patch }
-      this.persist()
+      this.persistSoon()
     },
   },
 })
