@@ -34,6 +34,8 @@ export interface ReaderSettings {
   /** 两端对齐 - flush margins for CJK prose. */
   justify: boolean
   zenMode: boolean
+  /** 入定仪式 —— 以三次呼吸入定（呼气时世界一层层退去）；关闭则直接快速过场。 */
+  zenRitual: boolean
   /** 沉浸全屏 - entering fullscreen also turns on zen mode (and restores on exit). */
   immersiveFullscreen: boolean
   /** 宣纸颗粒纹理（WebGL 静态叠层，不可用时静默退回纯色纸底）。 */
@@ -61,6 +63,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   paragraphIndent: false,
   justify: false,
   zenMode: false,
+  zenRitual: true,
   immersiveFullscreen: true,
   paperTexture: 'subtle',
   reminder: DEFAULT_REMINDER,

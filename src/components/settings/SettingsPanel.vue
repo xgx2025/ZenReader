@@ -44,6 +44,7 @@ const RANGES = [
 const TOGGLES = [
   { key: 'paragraphIndent', label: COPY.paragraphIndent },
   { key: 'justify', label: COPY.justify },
+  { key: 'zenRitual', label: COPY.zenRitual, hint: COPY.zenRitualHint },
   { key: 'immersiveFullscreen', label: COPY.immersiveFullscreen },
 ] as const
 
@@ -374,7 +375,12 @@ function toggleAction(action: ReminderAction) {
           :key="tg.key"
           class="flex items-center justify-between"
         >
-          <span class="text-xs text-ink-soft">{{ tg.label }}</span>
+          <span
+            class="text-xs text-ink-soft"
+            :title="'hint' in tg ? tg.hint : undefined"
+          >
+            {{ tg.label }}
+          </span>
           <button
             type="button"
             role="switch"

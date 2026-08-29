@@ -118,6 +118,32 @@
       );
   }
 
+  /* 禅境氛围光：入定后四角光晕徐徐加深，如暮色四合、烛火渐温。
+     常驻透明层，靠透明度过渡进出，DOM 上位于内容之前故永在纸色之上、文字之下。 */
+  .zen-ambient {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1.4s var(--ease-zen);
+    background:
+      radial-gradient(
+        46rem 32rem at 50% -12%,
+        color-mix(in srgb, var(--bamboo) 6%, transparent),
+        transparent 72%
+      ),
+      radial-gradient(
+        38rem 28rem at 50% 112%,
+        color-mix(in srgb, var(--sandal) 5%, transparent),
+        transparent 72%
+      );
+  }
+
+  .zen-ambient-on {
+    opacity: 1;
+  }
+
   /* 顶栏底部渐隐：内容滚过时被柔化，而非被一条硬线切断。 */
   .header-fade::after {
     content: "";

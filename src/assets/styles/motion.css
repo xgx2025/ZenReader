@@ -102,3 +102,238 @@
 .zen-prose mark.hl-pulse {
   animation: hl-pulse 1.2s var(--ease-zen);
 }
+
+/* ── 禅境出入 · 入定仪式 ─────────────────────────────────────────── */
+
+/* 顶栏化去／归来：如雾散去、如雾又起，藏在入定纱之下完成。 */
+.zen-header-enter-active,
+.zen-header-leave-active {
+  transition: opacity var(--motion-base) var(--ease-zen),
+    transform var(--motion-base) var(--ease-zen);
+}
+.zen-header-enter-from,
+.zen-header-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/*
+ * 呼吸入定：入定不是过场动画，是一场三次呼吸的仪式。
+ * 纸纱先起，呼吸圆自屏心浮现；圆随吸涨、随呼缩，每次呼气
+ * 世界真实地退去一层（顶栏 → 面板与边距 → 稳态，退去由
+ * ReaderView 的 ritualStage 门控）。第三息呼毕，圆化作一粒
+ * 墨点沉入屏心，纱散光起，露出澄明的正文。
+ * 时间线（与 ReaderView 的 RITUAL 常量同源）：
+ *   预备 0.8s → 三息 ×（吸 2.2s + 呼 2.6s）→ 沉底 0.9s。
+ * 覆盖层 pointer-events: auto，轻触任意处即跳过。
+ */
+.zen-ritual {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* 纸纱：随呼吸徐徐加深，末息散去露出正文。 */
+.zen-ritual-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--paper);
+  opacity: 0;
+  animation: zen-ritual-veil 16s var(--ease-zen) both;
+}
+@keyframes zen-ritual-veil {
+  0% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.34;
+  }
+  35% {
+    opacity: 0.52;
+  }
+  65% {
+    opacity: 0.58;
+  }
+  79% {
+    opacity: 0.58;
+  }
+  95% {
+    opacity: 0.12;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 呼吸圆：屏心一枚圆环，随吸涨、随呼缩；吸/呼 字样居中随行。 */
+.zen-breath {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 26vmin;
+  height: 26vmin;
+  transform: translate(-50%, -50%);
+}
+
+.zen-breath-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--bamboo) 34%, var(--ink) 12%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--bamboo) 8%, transparent) 0 46%,
+    transparent 68%
+  );
+  display: grid;
+  place-items: center;
+}
+
+.zen-breath-word {
+  font-family: var(--font-serif);
+  font-size: 5.2vmin;
+  color: var(--ink-soft);
+  user-select: none;
+}
+
+/* 预备：自无中浮现 */
+.zen-breath-pre .zen-breath-core {
+  animation: zen-breath-arrive 0.8s var(--ease-zen) both;
+}
+@keyframes zen-breath-arrive {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(0.68);
+    opacity: 0.78;
+  }
+}
+
+/* 吸：缓缓涨大 */
+.zen-breath-in .zen-breath-core {
+  animation: zen-breath-in 2.2s var(--ease-zen) both;
+}
+@keyframes zen-breath-in {
+  from {
+    transform: scale(0.68);
+    opacity: 0.78;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 呼：缓缓收缩 */
+.zen-breath-out .zen-breath-core {
+  animation: zen-breath-out 2.6s var(--ease-zen) both;
+}
+@keyframes zen-breath-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.68);
+    opacity: 0.78;
+  }
+}
+
+/* 第三息呼毕：圆化作墨点沉入屏心 */
+.zen-breath-sink .zen-breath-core {
+  animation: zen-breath-sink 0.9s var(--ease-zen) both;
+}
+@keyframes zen-breath-sink {
+  from {
+    transform: scale(0.68);
+    opacity: 0.78;
+  }
+  30% {
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(0.08) translateY(5px);
+    opacity: 0;
+  }
+}
+
+.zen-breath-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 52%, var(--sandal) 24%);
+  animation: zen-breath-dot 0.9s var(--ease-zen) both;
+}
+@keyframes zen-breath-dot {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  28% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.05) translateY(8px);
+  }
+}
+
+/* 跳过提示：迟到半拍浮现，不与圆争锋。 */
+.zen-ritual-skip {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 5.5%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dusk);
+  animation: zen-arrive 0.9s var(--ease-zen) 2.4s both;
+}
+
+/* ── 出定／速入：一口短促的雾过一眼。
+   出定时山月不现；关掉入定仪式时，也以这口雾作快速过场。 */
+
+.zen-veil-out-mist {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: var(--paper);
+  opacity: 0;
+  animation: zen-out-puff 0.6s var(--ease-zen) both;
+}
+@keyframes zen-out-puff {
+  0% {
+    opacity: 0;
+  }
+  38% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 禅境专属元素（Esc 提示、迷你香）迟到半拍浮现——乘纱将揭未揭之际，
+   如烟缓入。fill-mode both 保证延迟期内保持隐形。 */
+@keyframes zen-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.zen-arrive {
+  animation: zen-arrive 0.9s var(--ease-zen) 0.55s both;
+}

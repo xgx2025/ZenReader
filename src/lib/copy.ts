@@ -68,6 +68,8 @@ export const COPY = {
   paragraphIndent: '段首缩进',
   justify: '两端对齐',
   immersiveFullscreen: '沉浸全屏',
+  zenRitual: '入定仪式',
+  zenRitualHint: '以三次呼吸入定，呼气时世界一层层退去；轻触任意处可跳过',
   paperTexture: '纸纹',
   paperTextureOff: '无',
   paperTextureSubtle: '微',
@@ -126,6 +128,9 @@ export const COPY = {
   vaultNotOpen: '请先打开书库，方能引卷入藏',
   close: '关闭',
   escToReturn: '按 Esc 返回',
+  zenInhale: '吸',
+  zenExhale: '呼',
+  zenSkipHint: '轻触任意处 · 跳过',
   emptyToc: '卷中尚无章节',
   emptyFolders: '尚无分组',
 

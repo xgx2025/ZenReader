@@ -56,3 +56,33 @@ export function playIncenseChime() {
     osc.stop(now + 4)
   }
 }
+
+/** 入定钵：比香尽钵低纯五度、起音更缓、增益更轻——像一声很远的应答。 */
+export function playZenEnterChime() {
+  // 首次调用多半已在点击/按键的手势里，现场解锁一次。
+  prepareChime()
+  if (!ctx) return
+  if (ctx.state === 'suspended') void ctx.resume()
+  const now = ctx.currentTime
+
+  const master = ctx.createGain()
+  master.gain.value = 0.032
+  master.connect(ctx.destination)
+
+  for (const [ratio, gain] of PARTIALS) {
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.value = 349 * ratio // F4
+
+    const env = ctx.createGain()
+    // 80ms 缓起如轻抚，4 秒主音，尾音至 5.2s 散尽。
+    env.gain.setValueAtTime(0, now)
+    env.gain.linearRampToValueAtTime(gain, now + 0.08)
+    env.gain.exponentialRampToValueAtTime(0.001, now + 4)
+    env.gain.exponentialRampToValueAtTime(0.0001, now + 5.2)
+
+    osc.connect(env).connect(master)
+    osc.start(now)
+    osc.stop(now + 5.4)
+  }
+}
