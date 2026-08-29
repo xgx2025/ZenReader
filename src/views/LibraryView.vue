@@ -123,13 +123,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-paper text-ink">
+  <div class="min-h-screen text-ink">
     <header
-      class="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-paper/80 px-6 py-4 backdrop-blur"
+      class="header-fade sticky top-0 z-10 flex items-center justify-between bg-paper/55 px-6 py-4 backdrop-blur-md"
     >
-      <div>
+      <div class="flex items-baseline gap-2.5">
         <h1 class="font-serif text-xl leading-tight">{{ COPY.appName }}</h1>
-        <p class="text-xs text-dusk">{{ COPY.tagline }}</p>
+        <span class="text-[11px] uppercase tracking-[0.18em] text-dusk">
+          {{ COPY.appNameLatin }}
+        </span>
       </div>
 
       <div class="flex items-center gap-1.5">
@@ -173,11 +175,11 @@ onBeforeUnmount(() => {
       v-if="!library.hasVault"
       class="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center"
     >
-      <ZIcon name="folder" :size="40" :stroke-width="1" class="text-sandal" />
-      <h2 class="mt-5 font-serif text-2xl text-ink">{{ COPY.appName }}</h2>
-      <p class="mt-2 text-sm text-dusk">{{ COPY.tagline }}</p>
+      <div class="zen-breathe h-2.5 w-2.5 rounded-full bg-bamboo/50"></div>
+      <h2 class="mt-8 font-serif text-2xl text-ink">{{ COPY.appName }}</h2>
+      <p class="mt-2 text-sm tracking-wide text-dusk">{{ COPY.tagline }}</p>
       <button
-        class="mt-6 inline-flex items-center gap-2 rounded-full bg-bamboo px-6 py-2.5 text-sm text-paper transition-opacity hover:opacity-90"
+        class="mt-8 inline-flex items-center gap-2 rounded-full bg-bamboo px-6 py-2.5 text-sm text-paper transition-opacity hover:opacity-90"
         @click="library.openVault()"
       >
         <ZIcon name="folder" :size="16" />
@@ -186,12 +188,10 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="flex">
-      <aside
-        class="hidden w-56 shrink-0 border-r border-line p-4 md:block"
-      >
+      <aside class="hidden w-56 shrink-0 p-4 md:block">
         <button
-          class="mb-2 flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm text-ink-soft transition-colors hover:bg-bamboo/10"
-          :class="{ 'bg-bamboo/15 text-ink': !library.selectedFolder }"
+          class="mb-2 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10 hover:text-ink"
+          :class="{ 'bg-bamboo/15 font-medium text-ink': !library.selectedFolder }"
           @click="library.selectedFolder = ''"
         >
           <span>{{ COPY.library }}</span>
@@ -201,7 +201,7 @@ onBeforeUnmount(() => {
         <div class="mb-2">
           <button
             v-if="!creating"
-            class="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            class="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10 hover:text-ink"
             @click="startCreating"
           >
             <ZIcon name="plus" :size="14" />
@@ -212,7 +212,7 @@ onBeforeUnmount(() => {
               ref="newFolderInput"
               v-model="newFolderName"
               :placeholder="COPY.folderName"
-              class="w-full rounded-md border border-line bg-paper-deep/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-dusk focus:border-bamboo"
+              class="w-full rounded-lg bg-paper-deep/60 px-2.5 py-1.5 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
               @keydown.enter="submitFolder"
               @keydown.esc="cancelCreating"
             />
@@ -252,16 +252,20 @@ onBeforeUnmount(() => {
             <input
               v-model="library.search"
               :placeholder="COPY.search"
-              class="w-full rounded-full border border-line bg-paper-deep/60 py-2 pl-9 pr-4 text-sm text-ink outline-none placeholder:text-dusk focus:border-bamboo"
+              class="w-full rounded-full bg-paper-deep/60 py-2 pl-9 pr-4 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
             />
           </div>
 
-          <div class="flex rounded-full border border-line p-0.5">
+          <div class="flex rounded-full bg-paper-deep/60 p-0.5">
             <button
               v-for="o in SORTS"
               :key="o.key"
-              class="rounded-full px-3 py-1 text-xs text-ink-soft transition-colors"
-              :class="{ 'bg-bamboo/15 text-ink': library.sortBy === o.key }"
+              class="rounded-full px-3 py-1 text-xs transition-colors duration-200"
+              :class="
+                library.sortBy === o.key
+                  ? 'bg-paper font-medium text-ink shadow-sm'
+                  : 'text-ink-soft hover:text-ink'
+              "
               @click="library.sortBy = o.key"
             >
               {{ o.label }}
@@ -271,9 +275,10 @@ onBeforeUnmount(() => {
 
         <div
           v-if="library.files.length === 0"
-          class="mt-24 text-center text-dusk"
+          class="mt-24 flex flex-col items-center text-center text-dusk"
         >
-          <p class="font-serif text-lg">{{ COPY.emptyLibrary }}</p>
+          <div class="zen-breathe h-2 w-2 rounded-full bg-bamboo/50"></div>
+          <p class="mt-6 font-serif text-lg">{{ COPY.emptyLibrary }}</p>
           <RouterLink
             to="/import"
             class="mt-4 inline-flex items-center gap-2 text-sm text-bamboo hover:underline"
@@ -285,20 +290,22 @@ onBeforeUnmount(() => {
 
         <p
           v-else-if="library.filtered.length === 0"
-          class="mt-24 text-center text-dusk"
+          class="mt-24 flex flex-col items-center text-center text-dusk"
         >
-          寻无所获
+          <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
+          <span class="mt-5 font-serif">{{ COPY.emptySearch }}</span>
         </p>
 
         <div
           v-else
-          class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         >
           <DocumentCard
-            v-for="f in library.filtered"
+            v-for="(f, i) in library.filtered"
             :key="f.relativePath"
             :file="f"
             :meta="library.index[f.relativePath]"
+            :index="i"
             @menu="openMenu"
           />
         </div>

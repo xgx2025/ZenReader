@@ -18,7 +18,7 @@ export const COPY = {
   zenMode: '禅境',
   fullscreen: '全屏',
   exitFullscreen: '退出全屏',
-  search: '寻',
+  search: '寻…',
   toc: '目录',
   notes: '觉悟笔记',
 

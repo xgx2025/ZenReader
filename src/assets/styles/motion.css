@@ -33,6 +33,21 @@
   animation: zen-breathe 4s var(--ease-zen) infinite;
 }
 
+/* 卡片入场：徐徐上浮，一次即止；配合 stagger delay 形成"徐徐展开"的节奏。 */
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.card-rise {
+  animation: card-rise 420ms var(--ease-zen) both;
+}
+
 /* 燃香：火光明灭有息，香将尽时转急。 */
 @keyframes incense-ember {
   0%,

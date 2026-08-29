@@ -9,7 +9,10 @@ import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
 import type { IndexedMeta } from '@/stores/library'
 import type { VaultFile } from '@/types/document'
 
-const props = defineProps<{ file: VaultFile; meta?: IndexedMeta }>()
+const props = withDefaults(
+  defineProps<{ file: VaultFile; meta?: IndexedMeta; index?: number }>(),
+  { index: 0 },
+)
 
 const emit = defineEmits<{ menu: [file: VaultFile, x: number, y: number] }>()
 
@@ -32,17 +35,20 @@ const finished = computed(() => {
   const e = progressStore.get(props.file.relativePath)
   return !!e && e.ratio >= FINISHED_RATIO
 })
+
+/** 入场 stagger：逐张上浮，长列表封顶不等待。 */
+const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
 </script>
 
 <template>
   <div
-    class="group relative flex"
+    class="card-rise group relative flex"
+    :style="{ animationDelay: riseDelay }"
     @contextmenu.prevent="emit('menu', file, $event.clientX, $event.clientY)"
   >
     <RouterLink
       :to="`/read/${encodeURIComponent(file.relativePath)}`"
-      class="flex flex-1 flex-col rounded-lg border border-line bg-paper-deep/50 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:border-bamboo/40 hover:shadow-[0_8px_24px_rgba(0,0,0,0.05)]"
-      :class="{ 'border-bamboo/30': reading }"
+      class="flex flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04),0_16px_40px_rgba(0,0,0,0.07)]"
     >
       <div class="flex items-start justify-between gap-2">
         <h3 class="min-h-[2lh] font-serif text-lg leading-snug text-ink line-clamp-2">
@@ -50,9 +56,9 @@ const finished = computed(() => {
         </h3>
         <span
           v-if="finished"
-          class="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-bamboo/10 px-2 py-0.5 text-[11px] text-bamboo"
+          class="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full bg-bamboo/10 px-2 py-0.5 text-[11px] text-bamboo"
         >
-          <ZIcon name="bookmark" :size="11" />
+          <span class="h-1 w-1 rounded-full bg-bamboo"></span>
           {{ COPY.finished }}
         </span>
       </div>
@@ -70,23 +76,23 @@ const finished = computed(() => {
           <template v-if="reading">
             <div class="h-0.5 flex-1 overflow-hidden rounded-full bg-line">
               <div
-                class="h-full rounded-full bg-bamboo/70"
+                class="h-full rounded-full bg-bamboo/60"
                 :style="{ width: `${Math.round(reading.ratio * 100)}%` }"
               />
             </div>
-            <span class="shrink-0 text-[11px] tabular-nums text-bamboo">
+            <span class="shrink-0 text-[11px] tabular-nums text-dusk">
               {{ COPY.readingProgress }} {{ Math.round(reading.ratio * 100) }}%
             </span>
           </template>
         </div>
 
-        <div class="mt-3 flex items-center gap-3 text-xs text-ink-soft">
-          <span v-if="folderPath" class="truncate text-sandal">{{ folderPath }}</span>
+        <div class="mt-3 flex items-center gap-3 text-[11px] text-dusk">
+          <span v-if="folderPath" class="truncate">{{ folderPath }}</span>
           <template v-if="meta">
-            <span>{{ meta.wordCount }} 字</span>
-            <span>{{ meta.readingTime }} 分</span>
+            <span>{{ meta.wordCount }} {{ COPY.words }}</span>
+            <span>{{ meta.readingTime }} {{ COPY.minutes }}</span>
           </template>
-          <span v-if="mtime" class="ml-auto shrink-0 text-dusk">{{ mtime }}</span>
+          <span v-if="mtime" class="ml-auto shrink-0">{{ mtime }}</span>
         </div>
       </div>
     </RouterLink>

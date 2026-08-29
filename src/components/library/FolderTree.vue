@@ -14,8 +14,8 @@ const emit = defineEmits<{ select: [path: string] }>()
   <ul class="space-y-0.5">
     <li v-for="node in nodes" :key="node.path">
       <button
-        class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10"
-        :class="{ 'bg-bamboo/15 text-ink': selected === node.path }"
+        class="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10 hover:text-ink"
+        :class="{ 'bg-bamboo/15 font-medium text-ink': selected === node.path }"
         :style="{ paddingLeft: `${(depth ?? 0) * 14 + 10}px` }"
         @click="emit('select', node.path)"
       >

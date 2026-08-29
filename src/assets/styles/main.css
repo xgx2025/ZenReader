@@ -76,12 +76,54 @@
 
   body {
     background-color: var(--paper);
+    /* 环境光晕：角落两抹极淡的竹青/檀棕，营造晨光般的平静氛围。 */
+    background-image:
+      radial-gradient(
+        60rem 40rem at 85% -10%,
+        color-mix(in srgb, var(--bamboo) 4%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        50rem 35rem at -10% 110%,
+        color-mix(in srgb, var(--sandal) 3%, transparent),
+        transparent 70%
+      );
+    background-attachment: fixed;
     color: var(--ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     transition: background-color var(--motion-base) var(--ease-zen),
       color var(--motion-base) var(--ease-zen);
+  }
+
+  /* 暗色下光晕减半，避免夜读时背景发浑。 */
+  [data-theme="dark"] body {
+    background-image:
+      radial-gradient(
+        60rem 40rem at 85% -10%,
+        color-mix(in srgb, var(--bamboo) 2%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        50rem 35rem at -10% 110%,
+        color-mix(in srgb, var(--sandal) 1.5%, transparent),
+        transparent 70%
+      );
+  }
+
+  /* 顶栏底部渐隐：内容滚过时被柔化，而非被一条硬线切断。 */
+  .header-fade::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -28px 0;
+    height: 28px;
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper) 55%, transparent),
+      transparent
+    );
+    pointer-events: none;
   }
 
   ::selection {
