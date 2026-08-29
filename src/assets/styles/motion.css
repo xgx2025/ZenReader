@@ -73,3 +73,17 @@
 .incense-smoke-late {
   animation-delay: -1.9s;
 }
+
+/* 觉悟回看：跳转正文时的高亮脉冲（驻足的沙色 → 觉悟的竹色）。 */
+@keyframes hl-pulse {
+  0%,
+  100% {
+    background: color-mix(in srgb, var(--sandal) 22%, transparent);
+  }
+  50% {
+    background: color-mix(in srgb, var(--bamboo) 55%, transparent);
+  }
+}
+.zen-prose mark.hl-pulse {
+  animation: hl-pulse 1.2s var(--ease-zen);
+}

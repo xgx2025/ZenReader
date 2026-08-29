@@ -24,10 +24,19 @@ export const COPY = {
 
   emptyLibrary: '尚无书籍，静候墨香',
   emptyNotes: '尚无觉悟，静待花开',
+  emptySearch: '寻无所获',
 
   selectionHighlight: '驻足',
   selectionNote: '写下觉悟',
   notePlaceholder: '用你自己的话，写下此刻所悟…',
+  noteSearchPlaceholder: '寻原文与心得',
+  newNote: '新建',
+  editNote: '编辑',
+  newInsight: '新写觉悟',
+  editInsight: '重写觉悟',
+  freeNote: '自由觉悟',
+  deleteNote: '释怀此悟',
+  deleteNoteHint: '此觉悟将随烟散去，不可复回。',
   save: '存',
   cancel: '罢',
 

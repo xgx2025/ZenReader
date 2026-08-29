@@ -10,6 +10,7 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
 import ReminderToast from '@/components/reader/ReminderToast.vue'
 import IncenseControl from '@/components/reader/IncenseControl.vue'
@@ -50,9 +51,15 @@ const showToc = ref(false)
 const showNotes = ref(false)
 const activeNoteId = ref<string | null>(null)
 
-const composerOpen = ref(false)
-const composerQuote = ref('')
-const composerAnchor = ref<HighlightAnchor | null>(null)
+interface ComposerState {
+  quote: string
+  initial: string
+  title: string
+  noteId: string | null
+  anchor: HighlightAnchor | null
+}
+const composer = ref<ComposerState | null>(null)
+const composerOpen = computed(() => composer.value !== null)
 
 /** 续读 hint - fades away shortly after restoring a position. */
 const showResumeHint = ref(false)
@@ -89,7 +96,9 @@ const {
   restoreRatio,
 } = useReadingScroll(headingIds, onScrollProgress)
 const anchors = computed<AppliedAnchor[]>(() =>
-  notesStore.notes.map((n) => ({ noteId: n.id, anchor: n.anchor })),
+  notesStore.notes
+    .filter((n): n is Note & { anchor: HighlightAnchor } => n.anchor !== null)
+    .map((n) => ({ noteId: n.id, anchor: n.anchor })),
 )
 
 const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
@@ -190,6 +199,20 @@ function makeNote(anchor: HighlightAnchor, note: string, kind: Note['kind']): No
   }
 }
 
+function makeFreeNote(note: string): Note {
+  const ts = new Date().toISOString()
+  return {
+    id: crypto.randomUUID(),
+    relativePath: doc.value!.relativePath,
+    kind: 'free',
+    quote: '',
+    note,
+    anchor: null,
+    createdAt: ts,
+    updatedAt: ts,
+  }
+}
+
 async function onHighlight() {
   const cap = capture.value
   if (!cap) return
@@ -201,22 +224,70 @@ async function onHighlight() {
 function onOpenComposer() {
   const cap = capture.value
   if (!cap) return
-  composerQuote.value = cap.anchor.quote
-  composerAnchor.value = cap.anchor
-  composerOpen.value = true
+  composer.value = {
+    quote: cap.anchor.quote,
+    initial: '',
+    title: COPY.selectionNote,
+    noteId: null,
+    anchor: cap.anchor,
+  }
   dismiss()
 }
 
-async function onSaveNote(text: string) {
-  if (!composerAnchor.value) return
-  await notesStore.add(makeNote(composerAnchor.value, text, 'note'))
-  composerOpen.value = false
-  composerAnchor.value = null
-  renderProse()
+function onEditNote(id: string) {
+  const n = notesStore.notes.find((x) => x.id === id)
+  if (!n) return
+  composer.value = {
+    quote: n.quote,
+    initial: n.note,
+    title: n.kind === 'highlight' ? COPY.selectionNote : COPY.editInsight,
+    noteId: id,
+    anchor: n.anchor,
+  }
 }
 
-async function onDeleteNote(id: string) {
-  await notesStore.remove(id)
+function onNewFreeNote() {
+  composer.value = {
+    quote: '',
+    initial: '',
+    title: COPY.newInsight,
+    noteId: null,
+    anchor: null,
+  }
+}
+
+async function onSaveNote(text: string) {
+  const c = composer.value
+  if (!c) return
+  if (c.noteId) {
+    const target = notesStore.notes.find((x) => x.id === c.noteId)
+    await notesStore.update(
+      c.noteId,
+      target?.kind === 'highlight' ? { note: text, kind: 'note' } : { note: text },
+    )
+    composer.value = null
+  } else if (c.anchor) {
+    await notesStore.add(makeNote(c.anchor, text, 'note'))
+    composer.value = null
+    renderProse()
+  } else {
+    await notesStore.add(makeFreeNote(text))
+    composer.value = null
+  }
+}
+
+const deleteTarget = ref<Note | null>(null)
+
+function onRequestDelete(id: string) {
+  deleteTarget.value = notesStore.notes.find((x) => x.id === id) ?? null
+}
+
+async function onConfirmDelete() {
+  const n = deleteTarget.value
+  if (!n) return
+  deleteTarget.value = null
+  await notesStore.remove(n.id)
+  if (activeNoteId.value === n.id) activeNoteId.value = null
   renderProse()
 }
 
@@ -228,6 +299,21 @@ function onProseClick(e: MouseEvent) {
   if (!id) return
   activeNoteId.value = id
   showNotes.value = true
+}
+
+function jumpToHighlight(id: string) {
+  const mark = proseEl.value?.querySelector(`mark.hl[data-note-id="${id}"]`)
+  if (!mark) return
+  mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  mark.classList.remove('hl-pulse')
+  void (mark as HTMLElement).offsetWidth
+  mark.classList.add('hl-pulse')
+}
+
+function onSelectNote(id: string) {
+  const n = notesStore.notes.find((x) => x.id === id)
+  activeNoteId.value = id
+  if (n && n.anchor) jumpToHighlight(id)
 }
 
 function cycleTheme() {
@@ -293,7 +379,7 @@ function onKeydown(e: KeyboardEvent) {
   switch (e.key) {
     case 'Escape':
       if (composerOpen.value) {
-        composerOpen.value = false
+        composer.value = null
       } else if (settings.zenMode) {
         settings.setZenMode(false)
       } else if (showNotes.value) {
@@ -533,8 +619,10 @@ watch(() => route.params.path, loadDocument)
             :notes="notesStore.notes"
             :active-id="activeNoteId"
             @close="showNotes = false"
-            @select="activeNoteId = $event"
-            @delete="onDeleteNote"
+            @select="onSelectNote"
+            @edit="onEditNote"
+            @delete="onRequestDelete"
+            @create="onNewFreeNote"
           />
         </aside>
       </Transition>
@@ -610,9 +698,20 @@ watch(() => route.params.path, loadDocument)
 
     <InsightComposer
       :open="composerOpen"
-      :quote="composerQuote"
+      :quote="composer?.quote ?? ''"
+      :initial="composer?.initial ?? ''"
+      :title="composer?.title ?? COPY.selectionNote"
       @save="onSaveNote"
-      @cancel="composerOpen = false"
+      @cancel="composer = null"
+    />
+
+    <ConfirmDialog
+      :open="deleteTarget !== null"
+      :title="COPY.deleteNote"
+      :message="COPY.deleteNoteHint"
+      :confirm-label="COPY.delete"
+      @confirm="onConfirmDelete"
+      @close="deleteTarget = null"
     />
 
     <ReminderToast />

@@ -33,10 +33,21 @@ export const useNotesStore = defineStore('notes', () => {
     notes.value = list
   }
 
+  async function update(id: string, patch: Partial<Pick<Note, 'note' | 'kind'>>) {
+    const ts = new Date().toISOString()
+    const index = await readNotesIndex(settings.vaultPath)
+    const list = (index[relativePath.value] ?? []).map((n) =>
+      n.id === id ? { ...n, ...patch, updatedAt: ts } : n,
+    )
+    index[relativePath.value] = list
+    await writeNotesIndex(settings.vaultPath, index)
+    notes.value = list
+  }
+
   function clear() {
     notes.value = []
     relativePath.value = ''
   }
 
-  return { notes, relativePath, load, add, remove, clear }
+  return { notes, relativePath, load, add, update, remove, clear }
 })
