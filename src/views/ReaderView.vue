@@ -13,7 +13,6 @@ import ZIcon from '@/components/common/ZIcon.vue'
 import type { IconName } from '@/components/common/ZIcon.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
-import ReminderToast from '@/components/reader/ReminderToast.vue'
 import ImageViewer from '@/components/reader/ImageViewer.vue'
 import IncenseControl from '@/components/reader/IncenseControl.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
@@ -28,7 +27,6 @@ import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
 import { useReadingScroll } from '@/composables/useReadingScroll'
 import { useFullscreen } from '@/composables/useFullscreen'
-import { useZenClock } from '@/composables/useZenClock'
 import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
@@ -53,7 +51,6 @@ const settings = useSettingsStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
 const { isFullscreen, toggle: toggleFullscreen, setZen } = useFullscreen()
-const { start, stop } = useZenClock()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
@@ -620,7 +617,6 @@ watch(
 
 onMounted(() => {
   loadDocument()
-  start()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
@@ -630,7 +626,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   document.title = COPY.appTitle
   if (puffTimer) clearTimeout(puffTimer)
-  stop()
   progressStore.flush()
 })
 
@@ -945,8 +940,6 @@ watch(() => route.params.path, loadDocument)
     </Transition>
 
     <ImageViewer :src="viewerSrc" @close="viewerSrc = null" />
-
-    <ReminderToast />
 
     <!-- 入定仪式「一滴墨 · 一笔圆相」：纱起、墨滴落纸、一笔圆相绕心
          而书，每次呼气墨晕漫过全屏、世界退去一层，末息圆相收作墨点

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capability for the main window",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-set-fullscreen", "core:window:allow-set-progress-bar", "opener:default"]
+  "permissions": ["core:default", "core:window:allow-set-fullscreen", "core:window:allow-set-progress-bar", "core:tray:default", "notification:default", "opener:default"]
 }
