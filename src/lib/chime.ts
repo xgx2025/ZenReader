@@ -86,3 +86,32 @@ export function playZenEnterChime() {
     osc.stop(now + 5.4)
   }
 }
+
+/**
+ * 入定墨滴：一滴墨落纸的轻响——正弦「啵」一声，频率自高滑落如水滴，
+ * 短促而极轻，与入定钵遥相呼应。
+ */
+export function playZenDropCue() {
+  prepareChime()
+  if (!ctx) return
+  if (ctx.state === 'suspended') void ctx.resume()
+  const now = ctx.currentTime
+
+  const master = ctx.createGain()
+  master.gain.value = 0.045
+  master.connect(ctx.destination)
+
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(920, now)
+  osc.frequency.exponentialRampToValueAtTime(310, now + 0.15)
+
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(0, now)
+  env.gain.linearRampToValueAtTime(1, now + 0.006)
+  env.gain.exponentialRampToValueAtTime(0.0001, now + 0.3)
+
+  osc.connect(env).connect(master)
+  osc.start(now)
+  osc.stop(now + 0.32)
+}

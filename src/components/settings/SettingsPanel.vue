@@ -45,7 +45,7 @@ const TOGGLES = [
   { key: 'paragraphIndent', label: COPY.paragraphIndent },
   { key: 'justify', label: COPY.justify },
   { key: 'zenRitual', label: COPY.zenRitual, hint: COPY.zenRitualHint },
-  { key: 'immersiveFullscreen', label: COPY.immersiveFullscreen },
+  { key: 'immersiveFullscreen', label: COPY.immersiveFullscreen, hint: COPY.immersiveFullscreenHint },
 ] as const
 
 type ToggleKey = (typeof TOGGLES)[number]['key']

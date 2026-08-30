@@ -68,6 +68,7 @@ export const COPY = {
   paragraphIndent: '段首缩进',
   justify: '两端对齐',
   immersiveFullscreen: '沉浸全屏',
+  immersiveFullscreenHint: '入禅境时自动进入全屏，出定一并退去；全屏本身不牵动禅境',
   zenRitual: '入定仪式',
   zenRitualHint: '以三次呼吸入定，呼气时世界一层层退去；轻触任意处可跳过',
   paperTexture: '纸纹',

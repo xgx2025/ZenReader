@@ -35,6 +35,7 @@ import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
 import { playZenEnterChime } from '@/lib/chime'
 import ZenMotes from '@/components/reader/ZenMotes.vue'
+import ZenRitual from '@/components/reader/ZenRitual.vue'
 import type { HighlightAnchor, Note } from '@/types/note'
 import type { ThemeName } from '@/types/settings'
 import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
@@ -46,7 +47,7 @@ const notesStore = useNotesStore()
 const settings = useSettingsStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
-const { isFullscreen, toggle: toggleFullscreen } = useFullscreen()
+const { isFullscreen, toggle: toggleFullscreen, setZen } = useFullscreen()
 const { start, stop, awayNotice, clearAwayNotice } = useZenClock()
 
 const proseEl = ref<HTMLElement | null>(null)
@@ -140,33 +141,17 @@ watch(awayNotice, (v) => {
 })
 
 /**
- * 呼吸入定：入定是一场三次呼吸的仪式，不是过场动画。纸纱先起，
- * 呼吸圆自屏心浮现；每次呼气，世界真实地退去一层——顶栏化去、
- * 面板隐去边距舒展、稳态澄明（由 ritualStage 门控各 UI 层，分层
- * 动画见 motion.css 的「呼吸入定」一节）。第三息呼毕，圆化作墨点
- * 沉入屏心。无论禅境由按钮、快捷键还是全屏联动触发，都走这一套
- * 编排；轻触任意处可跳过，关掉「入定仪式」则快速过场。
+ * 入定仪式的编排全部在 ZenRitual.vue（「一滴墨 · 一笔圆相」）内自导
+ * 自演：组件按时间线推进，经 stage 事件通知此处让世界逐层退去
+ * （1 顶栏化去 → 2 面板隐去边距舒展 → 3 稳态澄明，各 UI 层的显隐
+ * 由 ritualStage 门控）。轻触任意处可跳过，关掉「入定仪式」则以
+ * 一口短雾快速过场。
  */
-type BreathPhase = 'pre' | 'in' | 'out' | 'sink'
-
-/** 仪式时间线（ms），与 motion.css 的 zen-ritual-veil 时序同源。 */
-const RITUAL = {
-  prep: 800,
-  inhale: 2200,
-  exhale: 2600,
-  sink: 900,
-  breaths: 3,
-} as const
-
 /** 仪式阶段 0→3：0 世界完整；1 顶栏已化去；2 面板已隐、边距舒展；3 稳态澄明。 */
 const ritualStage = ref(0)
 const ritualActive = ref(false)
-const breathPhase = ref<BreathPhase>('pre')
-/** 每次换相自增，作为 :key 重触发呼吸动画。 */
-const breathKey = ref(0)
 /** 出定／速入共用的一口短促纸色雾（zen-out-puff）。 */
 const zenPuff = ref(false)
-let ritualTimers: ReturnType<typeof setTimeout>[] = []
 let puffTimer: ReturnType<typeof setTimeout> | null = null
 
 // 持久化恢复 / 热重载 / 从书库返回时已处于禅境：直接落到稳态。
@@ -181,55 +166,6 @@ function prefersReducedMotion() {
   )
 }
 
-function clearRitualTimers() {
-  for (const t of ritualTimers) clearTimeout(t)
-  ritualTimers = []
-}
-
-function setPhase(phase: BreathPhase) {
-  breathPhase.value = phase
-  breathKey.value++
-}
-
-function startRitual() {
-  ritualStage.value = 0
-  ritualActive.value = true
-  setPhase('pre')
-  const at = (ms: number, fn: () => void) =>
-    ritualTimers.push(setTimeout(fn, ms))
-  const breath = RITUAL.inhale + RITUAL.exhale
-
-  for (let i = 0; i < RITUAL.breaths; i++) {
-    const base = RITUAL.prep + i * breath
-    at(base, () => setPhase('in'))
-    at(base + RITUAL.inhale, () => {
-      setPhase('out')
-      // 每次呼气，世界退去一层。
-      if (i === 0) ritualStage.value = Math.max(ritualStage.value, 1)
-      if (i === 1) ritualStage.value = Math.max(ritualStage.value, 2)
-    })
-  }
-  const end = RITUAL.prep + RITUAL.breaths * breath
-  at(end, () => {
-    setPhase('sink')
-    ritualStage.value = 3
-  })
-  at(end + RITUAL.sink, endRitual)
-}
-
-/** 仪式收束：覆盖层经 Transition 淡出卸载，稳态已由 stage 3 接管。 */
-function endRitual() {
-  clearRitualTimers()
-  ritualActive.value = false
-}
-
-/** 轻触任意处：跳过余下的呼吸，直达稳态。 */
-function skipRitual() {
-  if (!ritualActive.value) return
-  endRitual()
-  ritualStage.value = 3
-}
-
 /** 一口短促的雾：出定时过一眼；关掉仪式时作速入过场。 */
 function puff() {
   zenPuff.value = true
@@ -239,21 +175,36 @@ function puff() {
   }, 700)
 }
 
+/** 仪式推进：世界退去一层。 */
+function onRitualStage(n: number) {
+  ritualStage.value = n
+}
+
+/** 轻触任意处：仪式立止，直达稳态。 */
+function skipRitual() {
+  ritualStage.value = 3
+  ritualActive.value = false
+}
+
+/** 仪式自终：纱已散尽，卸下覆盖层。 */
+function endRitual() {
+  ritualActive.value = false
+}
+
 watch(
   () => settings.zenMode,
   (zen) => {
-    clearRitualTimers()
     if (zen) {
       if (settings.reminder.chime) playZenEnterChime()
       if (settings.zenRitual && !prefersReducedMotion()) {
-        startRitual()
+        ritualActive.value = true
       } else {
         ritualStage.value = 3
         puff()
       }
     } else {
-      ritualStage.value = 0
       ritualActive.value = false
+      ritualStage.value = 0
       puff()
     }
   },
@@ -549,7 +500,7 @@ function onKeydown(e: KeyboardEvent) {
       if (composerOpen.value) {
         composer.value = null
       } else if (settings.zenMode) {
-        settings.setZenMode(false)
+        setZen(false)
       } else if (showNotes.value) {
         showNotes.value = false
       } else if (showToc.value) {
@@ -586,7 +537,7 @@ function onKeydown(e: KeyboardEvent) {
       return
     case 'z':
     case 'Z':
-      settings.setZenMode(!settings.zenMode)
+      setZen(!settings.zenMode)
       return
     case '?':
       showShortcuts.value = !showShortcuts.value
@@ -613,7 +564,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
-  clearRitualTimers()
   if (puffTimer) clearTimeout(puffTimer)
   stop()
   progressStore.flush()
@@ -747,7 +697,7 @@ watch(() => route.params.path, loadDocument)
         <button
           class="flex h-9 items-center gap-1.5 rounded-full bg-bamboo/15 px-3 text-sm text-bamboo transition-colors hover:bg-bamboo/25"
           :title="COPY.zenMode"
-          @click="settings.setZenMode(true)"
+          @click="setZen(true)"
         >
           <ZIcon name="zen" :size="16" />
           {{ COPY.zenMode }}
@@ -930,26 +880,17 @@ watch(() => route.params.path, loadDocument)
 
     <ReminderToast />
 
-    <!-- 呼吸入定：纸纱先起，呼吸圆自屏心浮现；每次呼气世界退去一层，
-         第三息圆化墨点沉底、纱散光起。轻触任意处可跳过（时序见
-         motion.css 的「呼吸入定」一节）。 -->
+    <!-- 入定仪式「一滴墨 · 一笔圆相」：纱起、墨滴落纸、一笔圆相绕心
+         而书，每次呼气墨晕漫过全屏、世界退去一层，末息圆相收作墨点
+         沉底、水洗漫开纱散。轻触任意处可跳过（编排见 ZenRitual.vue，
+         时序见 motion.css「一滴墨 · 一笔圆相」一节）。 -->
     <Transition name="fade">
-      <div v-if="ritualActive" class="zen-ritual" @click="skipRitual">
-        <div class="zen-ritual-veil"></div>
-        <div
-          :key="breathKey"
-          class="zen-breath"
-          :class="`zen-breath-${breathPhase}`"
-        >
-          <div class="zen-breath-core">
-            <span v-if="breathPhase !== 'pre'" class="zen-breath-word">
-              {{ breathPhase === 'in' ? COPY.zenInhale : COPY.zenExhale }}
-            </span>
-          </div>
-          <div v-if="breathPhase === 'sink'" class="zen-breath-dot"></div>
-        </div>
-        <p class="zen-ritual-skip">{{ COPY.zenSkipHint }}</p>
-      </div>
+      <ZenRitual
+        v-if="ritualActive"
+        @stage="onRitualStage"
+        @skip="skipRitual"
+        @finish="endRitual"
+      />
     </Transition>
 
     <!-- 出定／速入的短雾 -->

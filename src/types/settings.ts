@@ -36,7 +36,10 @@ export interface ReaderSettings {
   zenMode: boolean
   /** 入定仪式 —— 以三次呼吸入定（呼气时世界一层层退去）；关闭则直接快速过场。 */
   zenRitual: boolean
-  /** 沉浸全屏 - entering fullscreen also turns on zen mode (and restores on exit). */
+  /**
+   * 沉浸全屏 - 禅境包含全屏：入禅境时自动进入全屏，出定时仅当全屏是
+   * 被本次入定自动开启的才一并退去。全屏本身（F11 / 工具栏）不牵动禅境。
+   */
   immersiveFullscreen: boolean
   /** 宣纸颗粒纹理（WebGL 静态叠层，不可用时静默退回纯色纸底）。 */
   paperTexture: PaperTextureLevel
