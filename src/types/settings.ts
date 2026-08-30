@@ -4,10 +4,16 @@ export type ReaderFont = 'serif' | 'sans'
 export type PaperTextureLevel = 'off' | 'subtle' | 'rich'
 
 /**
- * 入定动画五档：墨韵圆相 / 落叶听禅 / 香篆引定 / 轻雾速入 / 随机轮换。
- * 轻雾即旧版「关闭仪式」的快速短雾；随机在除轻雾外的各档中现抽。
+ * 入定动画六档：墨韵圆相 / 落叶听禅 / 香篆引定 / 星河入砚 / 轻雾速入 /
+ * 随机轮换。轻雾即旧版「关闭仪式」的快速短雾；随机在除轻雾外的各档中现抽。
  */
-export type ZenEntryStyle = 'ink' | 'leaf' | 'incense' | 'mist' | 'random'
+export type ZenEntryStyle =
+  | 'ink'
+  | 'leaf'
+  | 'incense'
+  | 'galaxy'
+  | 'mist'
+  | 'random'
 
 /** 歇息提醒动作：散行 / 饮水 / 望远 / 静息。 */
 export type ReminderAction = 'stretch' | 'water' | 'eyes' | 'breathe'

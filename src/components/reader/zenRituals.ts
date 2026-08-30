@@ -1,7 +1,8 @@
 /**
  * 入定动画注册表 —— 各档风格的单一事实源。
  *
- * 「仪式组件契约」（ZenRitualInk / ZenRitualLeaf / ZenRitualIncense 均须遵守）：
+ * 「仪式组件契约」（ZenRitualInk / ZenRitualLeaf / ZenRitualIncense /
+ *  ZenRitualGalaxy 均须遵守）：
  *  1. 组件自导自演全部时间线，依次 emit `stage(1|2|3)`——1 顶栏化去、
  *     2 面板隐去边距舒展、3 稳态澄明，节奏约在全程 30% / 60% / 85% 处，
  *     由 ReaderView 门控各 UI 层（语义不得更动）；
@@ -21,10 +22,11 @@ import type { ZenEntryStyle } from '@/types/settings'
 import ZenRitualInk from './ZenRitualInk.vue'
 import ZenRitualLeaf from './ZenRitualLeaf.vue'
 import ZenRitualIncense from './ZenRitualIncense.vue'
+import ZenRitualGalaxy from './ZenRitualGalaxy.vue'
 
 import { COPY } from '@/lib/copy'
 
-/** 有完整仪式组件的三档（随机档在其间现抽，轻雾除外）。 */
+/** 有完整仪式组件的四档（随机档在其间现抽，轻雾除外）。 */
 export type ZenRitualKey = Exclude<ZenEntryStyle, 'mist' | 'random'>
 
 export interface ZenEntryOption {
@@ -38,15 +40,17 @@ export const ZEN_ENTRY_OPTIONS: ZenEntryOption[] = [
   { key: 'ink', label: COPY.zenEntryInk, hint: COPY.zenEntryInkHint },
   { key: 'leaf', label: COPY.zenEntryLeaf, hint: COPY.zenEntryLeafHint },
   { key: 'incense', label: COPY.zenEntryIncense, hint: COPY.zenEntryIncenseHint },
+  { key: 'galaxy', label: COPY.zenEntryGalaxy, hint: COPY.zenEntryGalaxyHint },
   { key: 'mist', label: COPY.zenEntryMist, hint: COPY.zenEntryMistHint },
   { key: 'random', label: COPY.zenEntryRandom, hint: COPY.zenEntryRandomHint },
 ]
 
-/** 三套仪式组件，ReaderView 与设置面板试播共用。 */
+/** 四套仪式组件，ReaderView 与设置面板试播共用。 */
 export const ZEN_RITUAL_COMPONENTS: Record<ZenRitualKey, Component> = {
   ink: ZenRitualInk,
   leaf: ZenRitualLeaf,
   incense: ZenRitualIncense,
+  galaxy: ZenRitualGalaxy,
 }
 
 /** 随机档现抽一个具体风格，其余原样返回（结果绝不会是 random）。 */
@@ -54,6 +58,6 @@ export function resolveZenEntry(
   style: ZenEntryStyle,
 ): Exclude<ZenEntryStyle, 'random'> {
   if (style !== 'random') return style
-  const pool: ZenRitualKey[] = ['ink', 'leaf', 'incense']
+  const pool: ZenRitualKey[] = ['ink', 'leaf', 'incense', 'galaxy']
   return pool[Math.floor(Math.random() * pool.length)]
 }
