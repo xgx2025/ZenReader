@@ -53,7 +53,7 @@ const settings = useSettingsStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
 const { isFullscreen, toggle: toggleFullscreen, setZen } = useFullscreen()
-const { start, stop, awayNotice, clearAwayNotice } = useZenClock()
+const { start, stop } = useZenClock()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
@@ -161,12 +161,6 @@ function onIncenseIgnited() {
     showLitNotice.value = false
   }, 2200)
 }
-
-// 离席自动熄香提示：回来时轻声解释香为何灭了。
-watch(awayNotice, (v) => {
-  if (!v) return
-  window.setTimeout(() => clearAwayNotice(), 2600)
-})
 
 /**
  * 入定仪式的编排全部在 ZenRitual.vue（「一滴墨 · 一笔圆相」）内自导
@@ -885,17 +879,6 @@ watch(() => route.params.path, loadDocument)
     >
       <IncenseControl variant="zen" @ignite="onIncenseIgnited" />
     </div>
-
-    <!-- 离席熄香 hint -->
-    <Transition name="fade">
-      <p
-        v-if="awayNotice"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
-      >
-        <ZIcon name="incense" :size="13" class="text-dusk" />
-        {{ COPY.awayNotice }}
-      </p>
-    </Transition>
 
     <!-- 续读 hint -->
     <Transition name="fade">

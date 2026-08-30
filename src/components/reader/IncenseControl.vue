@@ -3,13 +3,14 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import IncenseFigure from '@/components/reader/IncenseFigure.vue'
 import { useZenClock } from '@/composables/useZenClock'
+import { useSettingsStore } from '@/stores/settings'
 import { COPY } from '@/lib/copy'
 
 /**
  * 香控件 -- 工具栏与禅境共用。
  *
  * 未燃：点击点香（通知父级展示「香已点燃」提示）。
- * 已燃：点击弹出迷你浮层（燃香图 + 已燃/还剩 + 熄香按钮）--
+ * 已燃：点击弹出迷你浮层（燃香图 + 已燃/还剩 + 香长档 + 熄香按钮）--
  * 熄香只出现在浮层里，消掉「单击误触白燃」的心痛。
  */
 const props = withDefaults(defineProps<{ variant?: 'toolbar' | 'zen' }>(), {
@@ -20,6 +21,20 @@ const emit = defineEmits<{ ignite: [] }>()
 
 const { lit, preHintActive, progress, remainingText, burnedText, ignite, extinguish } =
   useZenClock()
+
+const settings = useSettingsStore()
+
+/** 香长档位：与设置面板同一套称谓（小憩 / 一炷 / 深读 / 长卷）。 */
+const PRESETS = [
+  { minutes: 15, label: COPY.reminderPreset },
+  { minutes: 25, label: COPY.reminderPresetIncense },
+  { minutes: 45, label: COPY.reminderPresetDeep },
+  { minutes: 60, label: COPY.reminderPresetLong },
+] as const
+
+function pickPreset(minutes: number) {
+  settings.updateReminder({ intervalMinutes: minutes })
+}
 
 const menuOpen = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
@@ -123,9 +138,27 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <!-- 香长档：点选即换，当前档竹青点亮 -->
+        <div class="mt-3 grid grid-cols-4 gap-1">
+          <button
+            v-for="p in PRESETS"
+            :key="p.minutes"
+            type="button"
+            class="rounded-full border px-1 py-1 text-[11px] transition-colors"
+            :class="
+              settings.reminder.intervalMinutes === p.minutes
+                ? 'border-bamboo/50 bg-bamboo/15 text-bamboo'
+                : 'border-line text-ink-soft hover:border-sandal hover:text-ink'
+            "
+            @click="pickPreset(p.minutes)"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+
         <button
           type="button"
-          class="mt-3 w-full rounded-full border border-line px-2 py-1.5 text-xs text-ink-soft transition-colors hover:border-sandal hover:text-ink"
+          class="mt-2 w-full rounded-full border border-line px-2 py-1.5 text-xs text-ink-soft transition-colors hover:border-sandal hover:text-ink"
           @click="onSnuff"
         >
           {{ COPY.snuff }}
