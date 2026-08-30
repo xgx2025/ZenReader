@@ -1,6 +1,13 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, ref } from 'vue'
+
 import ZIcon from '@/components/common/ZIcon.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import {
+  ZEN_ENTRY_OPTIONS,
+  ZEN_RITUAL_COMPONENTS,
+  resolveZenEntry,
+} from '@/components/reader/zenRituals'
 import { useSettingsStore } from '@/stores/settings'
 import { nativeFs, isTauri } from '@/lib/native'
 import { COPY } from '@/lib/copy'
@@ -10,6 +17,7 @@ import type {
   ReaderSettings,
   PaperTextureLevel,
   ReminderAction,
+  ZenEntryStyle,
 } from '@/types/settings'
 
 defineProps<{ open: boolean }>()
@@ -44,7 +52,6 @@ const RANGES = [
 const TOGGLES = [
   { key: 'paragraphIndent', label: COPY.paragraphIndent },
   { key: 'justify', label: COPY.justify },
-  { key: 'zenRitual', label: COPY.zenRitual, hint: COPY.zenRitualHint },
   { key: 'immersiveFullscreen', label: COPY.immersiveFullscreen, hint: COPY.immersiveFullscreenHint },
 ] as const
 
@@ -102,6 +109,50 @@ function toggleAction(action: ReminderAction) {
     : [...cur, action]
   settings.updateReminder({ actions: next })
 }
+
+/** 当前档的意境描述（设置面板里的一行小字）。 */
+const currentZenEntry = computed(() =>
+  ZEN_ENTRY_OPTIONS.find((o) => o.key === settings.zenEntry),
+)
+
+/**
+ * 试播：全屏预演所选（随机档现抽）的入定动画。仪式组件本就自含
+ * 时间线、轻触即跳过，此处只管挂载与卸载；轻雾没有组件，复用出定
+ * 的那口短雾，播完自动收场。
+ */
+const previewStyle = ref<Exclude<ZenEntryStyle, 'random'> | null>(null)
+const previewNonce = ref(0)
+const previewComponent = computed(() =>
+  previewStyle.value && previewStyle.value !== 'mist'
+    ? ZEN_RITUAL_COMPONENTS[previewStyle.value]
+    : null,
+)
+let previewTimer: ReturnType<typeof setTimeout> | null = null
+
+function playPreview() {
+  previewStyle.value = resolveZenEntry(settings.zenEntry)
+  previewNonce.value++
+  if (previewTimer) {
+    clearTimeout(previewTimer)
+    previewTimer = null
+  }
+  if (previewStyle.value === 'mist') {
+    previewTimer = setTimeout(() => {
+      previewTimer = null
+      previewStyle.value = null
+    }, 1000)
+  }
+}
+
+function closePreview() {
+  if (previewTimer) {
+    clearTimeout(previewTimer)
+    previewTimer = null
+  }
+  previewStyle.value = null
+}
+
+onBeforeUnmount(closePreview)
 </script>
 
 <template>
@@ -347,6 +398,36 @@ function toggleAction(action: ReminderAction) {
       </div>
     </section>
 
+    <!-- 入定动画 -->
+    <section class="border-b border-line px-5 py-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-medium tracking-wide text-dusk">
+          {{ COPY.zenEntry }}
+        </h3>
+        <button
+          class="rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink"
+          @click="playPreview"
+        >
+          {{ COPY.zenEntryPreview }}
+        </button>
+      </div>
+      <div class="mt-2.5 flex rounded-full border border-line p-0.5">
+        <button
+          v-for="s in ZEN_ENTRY_OPTIONS"
+          :key="s.key"
+          class="flex-1 rounded-full px-2 py-1.5 text-xs text-ink-soft transition-colors"
+          :class="{ 'bg-bamboo/15 text-ink': settings.zenEntry === s.key }"
+          :title="s.hint"
+          @click="settings.update({ zenEntry: s.key })"
+        >
+          {{ s.label }}
+        </button>
+      </div>
+      <p class="mt-2 text-[11px] leading-snug text-dusk">
+        {{ currentZenEntry?.hint }}
+      </p>
+    </section>
+
     <!-- 阅读 -->
     <section class="px-5 py-4">
       <h3 class="text-xs font-medium tracking-wide text-dusk">
@@ -405,5 +486,30 @@ function toggleAction(action: ReminderAction) {
         </div>
       </div>
     </section>
+
+    <!-- 试播：全屏预演所选入定动画，轻触任意处即止 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="previewStyle"
+          class="fixed inset-0 z-[70] cursor-pointer"
+          @click="closePreview"
+        >
+          <div
+            v-if="previewStyle === 'mist'"
+            :key="previewNonce"
+            class="zen-veil-out-mist"
+            aria-hidden="true"
+          ></div>
+          <component
+            :is="previewComponent"
+            v-else
+            :key="previewNonce"
+            @skip="closePreview"
+            @finish="closePreview"
+          />
+        </div>
+      </Transition>
+    </Teleport>
   </BaseDialog>
 </template>

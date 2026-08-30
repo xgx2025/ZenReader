@@ -38,7 +38,11 @@ import { isTauri, openExternal } from '@/lib/native'
 import { resolveDocLink } from '@/lib/vault'
 import { playZenEnterChime } from '@/lib/chime'
 import ZenMotes from '@/components/reader/ZenMotes.vue'
-import ZenRitual from '@/components/reader/ZenRitual.vue'
+import {
+  ZEN_RITUAL_COMPONENTS,
+  resolveZenEntry,
+  type ZenRitualKey,
+} from '@/components/reader/zenRituals'
 import type { HighlightAnchor, Note } from '@/types/note'
 import type { ThemeName } from '@/types/settings'
 import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
@@ -160,15 +164,17 @@ function onIncenseIgnited() {
 }
 
 /**
- * 入定仪式的编排全部在 ZenRitual.vue（「一滴墨 · 一笔圆相」）内自导
- * 自演：组件按时间线推进，经 stage 事件通知此处让世界逐层退去
- * （1 顶栏化去 → 2 面板隐去边距舒展 → 3 稳态澄明，各 UI 层的显隐
- * 由 ritualStage 门控）。轻触任意处可跳过，关掉「入定仪式」则以
- * 一口短雾快速过场。
+ * 入定动画的编排全部在仪式组件（ZenRitualInk / ZenRitualLeaf /
+ * ZenRitualIncense，注册表见 zenRituals.ts）内自导自演：组件按时间线
+ * 推进，经 stage 事件通知此处让世界逐层退去（1 顶栏化去 → 2 面板隐
+ * 去边距舒展 → 3 稳态澄明，各 UI 层的显隐由 ritualStage 门控）。轻触
+ * 任意处可跳过；「轻雾」档（或系统减动效）则以一口短雾快速过场。
  */
 /** 仪式阶段 0→3：0 世界完整；1 顶栏已化去；2 面板已隐、边距舒展；3 稳态澄明。 */
 const ritualStage = ref(0)
 const ritualActive = ref(false)
+/** 本次入定所选中的仪式（随机档在入定一刻现抽）。 */
+const activeRitual = ref<ZenRitualKey>('ink')
 /** 出定／速入共用的一口短促纸色雾（zen-out-puff）。 */
 const zenPuff = ref(false)
 let puffTimer: ReturnType<typeof setTimeout> | null = null
@@ -215,7 +221,9 @@ watch(
   (zen) => {
     if (zen) {
       if (settings.reminder.chime) playZenEnterChime()
-      if (settings.zenRitual && !prefersReducedMotion()) {
+      const style = resolveZenEntry(settings.zenEntry)
+      if (style !== 'mist' && !prefersReducedMotion()) {
+        activeRitual.value = style
         ritualActive.value = true
       } else {
         ritualStage.value = 3
@@ -941,12 +949,12 @@ watch(() => route.params.path, loadDocument)
 
     <ImageViewer :src="viewerSrc" @close="viewerSrc = null" />
 
-    <!-- 入定仪式「一滴墨 · 一笔圆相」：纱起、墨滴落纸、一笔圆相绕心
-         而书，每次呼气墨晕漫过全屏、世界退去一层，末息圆相收作墨点
-         沉底、水洗漫开纱散。轻触任意处可跳过（编排见 ZenRitual.vue，
-         时序见 motion.css「一滴墨 · 一笔圆相」一节）。 -->
+    <!-- 入定仪式（风格由设置「入定动画」决定，注册表见 zenRituals.ts）：
+         墨韵/落叶/香篆各自按契约推进——纱起、各自意象展开，世界退去
+         一层→两层→稳态，末景水洗漫开纱散。轻触任意处可跳过。 -->
     <Transition name="fade">
-      <ZenRitual
+      <component
+        :is="ZEN_RITUAL_COMPONENTS[activeRitual]"
         v-if="ritualActive"
         @stage="onRitualStage"
         @skip="skipRitual"

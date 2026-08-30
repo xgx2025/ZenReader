@@ -3,6 +3,12 @@ export type ReaderFont = 'serif' | 'sans'
 /** 宣纸纹理强度三档：无 / 微（默认）/ 显。 */
 export type PaperTextureLevel = 'off' | 'subtle' | 'rich'
 
+/**
+ * 入定动画五档：墨韵圆相 / 落叶听禅 / 香篆引定 / 轻雾速入 / 随机轮换。
+ * 轻雾即旧版「关闭仪式」的快速短雾；随机在除轻雾外的各档中现抽。
+ */
+export type ZenEntryStyle = 'ink' | 'leaf' | 'incense' | 'mist' | 'random'
+
 /** 歇息提醒动作：散行 / 饮水 / 望远 / 静息。 */
 export type ReminderAction = 'stretch' | 'water' | 'eyes' | 'breathe'
 
@@ -34,8 +40,8 @@ export interface ReaderSettings {
   /** 两端对齐 - flush margins for CJK prose. */
   justify: boolean
   zenMode: boolean
-  /** 入定仪式 —— 以三次呼吸入定（呼气时世界一层层退去）；关闭则直接快速过场。 */
-  zenRitual: boolean
+  /** 入定动画 —— 进入禅境时的过场仪式风格；轻雾为约 1 秒的快速短雾。 */
+  zenEntry: ZenEntryStyle
   /**
    * 沉浸全屏 - 禅境包含全屏：入禅境时自动进入全屏，出定时仅当全屏是
    * 被本次入定自动开启的才一并退去。全屏本身（F11 / 工具栏）不牵动禅境。
@@ -66,7 +72,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   paragraphIndent: false,
   justify: false,
   zenMode: false,
-  zenRitual: true,
+  zenEntry: 'ink',
   immersiveFullscreen: true,
   paperTexture: 'subtle',
   reminder: DEFAULT_REMINDER,

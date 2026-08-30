@@ -17,13 +17,24 @@ let persistFlushWired = false
 /**
  * 浅合并之上，对 reminder 再深合并一层：旧版本持久化里存量的 reminder 对象
  * 会整体覆盖默认值，新增字段（如 chime）若无深合并将悄悄丢失。
+ * 另做一条迁移：旧版布尔开关 zenRitual（关=快速短雾）由 zenEntry 枚举取代
+ * ——曾关掉仪式的老用户落「轻雾」，其余落默认「墨韵」，并剥掉旧键。
  */
 function mergeSettings(parsed: Partial<ReaderSettings>): ReaderSettings {
-  return {
+  const merged: ReaderSettings = {
     ...DEFAULT_SETTINGS,
     ...parsed,
     reminder: { ...DEFAULT_SETTINGS.reminder, ...(parsed.reminder ?? {}) },
   }
+  if (parsed.zenEntry === undefined) {
+    merged.zenEntry =
+      (parsed as Partial<ReaderSettings> & { zenRitual?: unknown }).zenRitual ===
+      false
+        ? 'mist'
+        : DEFAULT_SETTINGS.zenEntry
+  }
+  delete (merged as Partial<ReaderSettings> & { zenRitual?: unknown }).zenRitual
+  return merged
 }
 
 /**
