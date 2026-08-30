@@ -10,7 +10,7 @@ const props = withDefaults(
     /** 标准头部（标题 + 关闭钮）；不传则由插槽自绘头部。 */
     title?: string
     maxWidth?: 'xs' | 'sm' | 'md'
-    /** 提供后卡片限高并内部滚动（如 '85vh'）。 */
+    /** 提供后卡片限高：头部与 footer 插槽钉在卡片两缘，默认插槽内容区内部滚动（如 '85vh'）。 */
     maxHeight?: string
     /** 无标题头部的弹窗用它补充可访问名称。 */
     ariaLabel?: string
@@ -88,12 +88,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
           :aria-label="title || ariaLabel || undefined"
           tabindex="-1"
           class="w-full rounded-2xl border border-line bg-paper shadow-zen-lg outline-none"
-          :class="[WIDTH[maxWidth], maxHeight ? 'overflow-y-auto' : '']"
+          :class="[WIDTH[maxWidth], maxHeight ? 'flex max-h-full flex-col overflow-hidden' : '']"
           :style="maxHeight ? { maxHeight } : undefined"
         >
           <header
             v-if="title"
-            class="flex items-center justify-between border-b border-line px-5 py-4"
+            class="flex shrink-0 items-center justify-between border-b border-line px-5 py-4"
           >
             <h2 class="font-serif text-lg text-ink">{{ title }}</h2>
             <button
@@ -104,7 +104,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
               <ZIcon name="close" :size="17" />
             </button>
           </header>
-          <slot />
+          <!-- 限高时：内容区自滚动，头部与 footer 插槽钉在卡片两缘。 -->
+          <div v-if="maxHeight" class="min-h-0 flex-1 overflow-y-auto">
+            <slot />
+          </div>
+          <template v-else>
+            <slot />
+          </template>
           <slot name="footer" />
         </div>
       </div>
