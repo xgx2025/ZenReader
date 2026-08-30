@@ -79,7 +79,7 @@ export const COPY = {
   zenEntryInk: '墨韵',
   zenEntryInkHint: '一滴墨坠入屏心，一笔圆相书就，三息呼吸里世界层层退去',
   zenEntryLeaf: '落叶',
-  zenEntryLeafHint: '竹叶徐徐飘落，暮色四合，末叶落定时澄明自现',
+  zenEntryLeafHint: '一叶知秋，风起万叶；暮色四合，万叶栖水，末叶点水澄明自现',
   zenEntryIncense: '香篆',
   zenEntryIncenseHint: '一炷香火星微明，烟丝袅袅，光随烟聚，散处凝作一点澄明',
   zenEntryGalaxy: '星河',
