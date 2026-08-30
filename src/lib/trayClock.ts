@@ -64,9 +64,9 @@ export async function setupTray(h: {
       tooltip: h.tooltip(),
       menu,
       showMenuOnLeftClick: false,
-      // 左键（不带菜单）唤回主窗。
+      // 左键（不带菜单）唤回主窗；右击也是 'Click'，须再验按键才不出列。
       action: (e) => {
-        if (e.type === 'Click') void showMainWindow()
+        if (e.type === 'Click' && e.button === 'Left') void showMainWindow()
       },
     })
   } catch (e) {
