@@ -41,7 +41,7 @@ export const COPY = {
   cancel: '罢',
 
   words: '字',
-  minutes: '分',
+  minutes: '分钟',
 
   resumeReading: '接着上次',
   readingProgress: '读到',

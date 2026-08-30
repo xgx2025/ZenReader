@@ -75,7 +75,7 @@ const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
       class="flex flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
     >
       <div class="flex items-start justify-between gap-2">
-        <h3 class="min-h-[2lh] font-serif text-lg leading-snug text-ink line-clamp-2">
+        <h3 class="min-h-[2lh] font-serif font-bold text-lg leading-snug text-ink line-clamp-2">
           {{ title }}
         </h3>
         <span
