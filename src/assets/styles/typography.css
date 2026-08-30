@@ -152,6 +152,32 @@
   display: block;
 }
 
+/* Mermaid 图卡：与代码块同一纸感容器；图居中，超宽横向滚动。 */
+.zen-prose .mermaid-figure {
+  margin: 1.6em 0;
+  padding: 1.4em 1.6em;
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+  font-family: var(--font-sans);
+  transition: background-color var(--motion-base) var(--ease-zen);
+}
+.zen-prose .mermaid-figure svg {
+  max-width: 100%;
+  height: auto;
+}
+/* 渲染失败：退回源码，斜体小注说明缘由。 */
+.zen-prose .mermaid-figure.mermaid-figure-error {
+  display: block;
+}
+.zen-prose .mermaid-figure.mermaid-figure-error code {
+  display: block;
+  white-space: pre-wrap;
+}
+
 .zen-prose table {
   margin: 1.6em 0;
   border-collapse: collapse;

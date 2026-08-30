@@ -21,6 +21,7 @@ import ShortcutSheet from '@/components/reader/ShortcutSheet.vue'
 
 import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
+import { renderMermaidBlocks } from '@/lib/markdown/mermaid'
 import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
 import { useReadingScroll } from '@/composables/useReadingScroll'
@@ -227,6 +228,8 @@ function renderProse() {
   if (!el || !doc.value) return
   el.innerHTML = doc.value.html
   applyAnchors(el, anchors.value)
+  // mermaid 先行把 `language-mermaid` 块替换为图卡，shiki 便不会再碰它们。
+  renderMermaidBlocks(el, settings.theme)
   highlightCodeBlocks(el, settings.theme)
 }
 
@@ -549,6 +552,8 @@ watch(
   () => settings.theme,
   () => {
     if (proseEl.value && doc.value) {
+      // mermaid 图卡内藏源码（data-mermaid-src），主题切换整图重绘。
+      renderMermaidBlocks(proseEl.value, settings.theme)
       highlightCodeBlocks(proseEl.value, settings.theme)
     }
   },
