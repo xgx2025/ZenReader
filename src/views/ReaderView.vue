@@ -34,6 +34,8 @@ import { useProgressStore } from '@/stores/progress'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
+import { isTauri, openExternal } from '@/lib/native'
+import { resolveDocLink } from '@/lib/vault'
 import { playZenEnterChime } from '@/lib/chime'
 import ZenMotes from '@/components/reader/ZenMotes.vue'
 import ZenRitual from '@/components/reader/ZenRitual.vue'
@@ -413,14 +415,40 @@ async function onConfirmDelete() {
   }
 }
 
+const EXTERNAL_HREF = /^(?:https?:\/\/|mailto:)/i
+
 function onProseClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   const mark = target.closest('mark.hl')
-  if (!mark) return
-  const id = mark.getAttribute('data-note-id')
-  if (!id) return
-  activeNoteId.value = id
-  showNotes.value = true
+  if (mark) {
+    const id = mark.getAttribute('data-note-id')
+    if (id) {
+      activeNoteId.value = id
+      showNotes.value = true
+    }
+    return
+  }
+  const anchor = target.closest('a[href]')
+  if (!anchor) return
+  const href = anchor.getAttribute('href') ?? ''
+  if (!href || href.startsWith('#')) return // 页内锚点（含脚注）走默认行为
+  if (EXTERNAL_HREF.test(href)) {
+    // 系统浏览器接管外链，WebView 原地不动；浏览器 dev 走默认新标签。
+    if (isTauri()) {
+      e.preventDefault()
+      void openExternal(href)
+    }
+    return
+  }
+  // 其余一律不导航，防止 WebView 跑出去回不来。
+  e.preventDefault()
+  const resolved = route.params.path
+    ? resolveDocLink(route.params.path as string, href)
+    : null
+  if (resolved) {
+    // 互链走应用内路由；目标缺失时由 loadDocument 的失败流提示并回书库。
+    void router.push(`/read/${encodeURIComponent(resolved)}`)
+  }
 }
 
 function jumpToHighlight(id: string) {

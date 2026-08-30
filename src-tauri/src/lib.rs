@@ -176,6 +176,8 @@ fn write_settings(app: tauri::AppHandle, content: String) -> Result<(), String> 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 外链经系统默认浏览器打开，WebView 永不离开应用。
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             pick_folder,
             read_vault,
