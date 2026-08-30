@@ -33,6 +33,21 @@
   animation: zen-breathe 4s var(--ease-zen) infinite;
 }
 
+/* 卡片入场：徐徐上浮，一次即止；配合 stagger delay 形成"徐徐展开"的节奏。 */
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.card-rise {
+  animation: card-rise 420ms var(--ease-zen) both;
+}
+
 /* 燃香：火光明灭有息，香将尽时转急。 */
 @keyframes incense-ember {
   0%,
@@ -86,4 +101,594 @@
 }
 .zen-prose mark.hl-pulse {
   animation: hl-pulse 1.2s var(--ease-zen);
+}
+
+/* ── 禅境出入 · 入定仪式 ─────────────────────────────────────────── */
+
+/* 顶栏化去／归来：如雾散去、如雾又起，藏在入定纱之下完成。 */
+.zen-header-enter-active,
+.zen-header-leave-active {
+  transition: opacity var(--motion-base) var(--ease-zen),
+    transform var(--motion-base) var(--ease-zen);
+}
+.zen-header-enter-from,
+.zen-header-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/*
+ * 一滴墨 · 一笔圆相 —— 入定仪式（编排组件见 ZenRitual.vue）。
+ * 纱徐起 → 一滴墨坠入屏心（0.24s 起落，0.82s 落纸，涟漪化开）→
+ * 笔锋顺势落纸，逆时针绕行 280° 书一枚圆相：墨随行渐瘦、飞墨随锋
+ * 绽开、末段飞白；三息呼吸与之同频，每次呼气一圈墨晕漫过全屏，
+ * 世界随之退去一层（顶栏 → 面板与边距 → 稳态，退去由 ReaderView
+ * 的 ritualStage 门控）。末息呼毕圆相收势旋转、化作一粒墨点沉入
+ * 屏心，末一圈水洗漫开、纱散，露出澄明禅境。
+ * 时间线（与 ZenRitual.vue 的常量同源，改动须两处同步）：
+ *   预备 1.1s → 三息 ×（吸 2.2s + 呼 2.6s）→ 沉底 1.5s，共 17s。
+ *   运笔 1.1s 起笔、12.9s 收势；墨滴 0.82s 落纸。
+ * 覆盖层 pointer-events: auto，轻触任意处即跳过。
+ */
+.zen-ritual {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+  /* 仪式视觉的统一定位基线：圆心略高于几何中心，呼吸更沉。 */
+  --ritual-cy: 45%;
+}
+
+/* 墨纱：纸色四合、边缘晕深，随呼吸徐徐合拢，末段散去露出正文。 */
+.zen-ritual-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 95% 85% at 50% var(--ritual-cy),
+      transparent 0 24%,
+      color-mix(in srgb, var(--paper-deep) 88%, transparent) 88%
+    ),
+    var(--paper);
+  opacity: 0;
+  animation: zen-ritual-veil 17s var(--ease-zen) both;
+}
+@keyframes zen-ritual-veil {
+  0% {
+    opacity: 0;
+  }
+  6% {
+    opacity: 0.58;
+  }
+  30% {
+    opacity: 0.78;
+  }
+  86% {
+    opacity: 0.78;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 墨滴：自高处坠入屏心，尾迹收细，落纸一瞬压扁化作涟漪。 */
+.zen-ink-drop {
+  position: absolute;
+  left: 50%;
+  top: var(--ritual-cy);
+  width: 1.1vmin;
+  height: 1.5vmin;
+  margin: -0.75vmin 0 0 -0.55vmin;
+  border-radius: 50% 50% 58% 58%;
+  background: color-mix(in srgb, var(--ink) 82%, var(--sandal) 18%);
+  opacity: 0;
+  animation:
+    zen-ink-drop-fall 0.58s cubic-bezier(0.5, 0, 0.9, 0.6) 0.24s both,
+    zen-ink-drop-land 0.5s var(--ease-zen) 0.82s both;
+}
+@keyframes zen-ink-drop-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-24vmin) scaleY(1.35);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleY(1.18);
+  }
+}
+@keyframes zen-ink-drop-land {
+  0% {
+    transform: scale(1, 1);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.8, 0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(7px) scale(0.2, 0.08);
+  }
+}
+/* 坠落的墨尾。 */
+.zen-ink-drop::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 96%;
+  width: 1.5px;
+  height: 7vmin;
+  transform-origin: bottom;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--ink) 52%, transparent),
+    transparent
+  );
+  opacity: 0;
+  animation: zen-ink-tail 0.58s linear 0.24s both;
+}
+@keyframes zen-ink-tail {
+  0% {
+    opacity: 0.65;
+    transform: translateX(-50%) scaleY(1);
+  }
+  100% {
+    opacity: 0.9;
+    transform: translateX(-50%) scaleY(0.12);
+  }
+}
+
+/* 落纸涟漪：两圈墨晕自落点荡开，恰与圆相同径。 */
+.zen-ink-ripple {
+  position: absolute;
+  left: 50%;
+  top: var(--ritual-cy);
+  width: 48vmin;
+  height: 48vmin;
+  margin: -24vmin 0 0 -24vmin;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    transparent 56%,
+    color-mix(in srgb, var(--ink) 20%, transparent) 66%,
+    transparent 75%
+  );
+  opacity: 0;
+  animation: zen-ink-ripple 2s cubic-bezier(0.2, 0.6, 0.3, 1) var(--d) both;
+}
+@keyframes zen-ink-ripple {
+  0% {
+    opacity: 0;
+    transform: scale(0.04);
+  }
+  12% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* 呼气水洗：一圈墨晕自屏心漫过全屏，扫过之处世界退去一层。 */
+.zen-ink-wash {
+  position: absolute;
+  left: 50%;
+  top: var(--ritual-cy);
+  width: 190vmax;
+  height: 190vmax;
+  margin: -95vmax 0 0 -95vmax;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    transparent 53%,
+    color-mix(in srgb, var(--paper-deep) 55%, transparent) 61%,
+    color-mix(in srgb, var(--ink) 9%, transparent) 65%,
+    transparent 71%
+  );
+  opacity: 0;
+  animation: zen-ink-wash 2.6s var(--ease-zen) var(--d) both;
+}
+@keyframes zen-ink-wash {
+  0% {
+    opacity: 0;
+    transform: scale(0.03);
+  }
+  10% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* 一笔圆相：一笔书就，墨色由重渐轻，末段飞白，收势旋转沉入屏心。 */
+.zen-enso {
+  position: absolute;
+  left: 50%;
+  top: var(--ritual-cy);
+  width: min(62vmin, 560px);
+  height: auto;
+  transform: translate(-50%, -50%);
+  overflow: visible;
+}
+.zen-enso path {
+  fill: none;
+}
+/* 收势时整组旋转收缩——圆相化作墨点归于屏心。 */
+.zen-enso-inner {
+  transform-origin: 300px 300px;
+}
+.zen-ritual-sink .zen-enso-inner {
+  animation: zen-enso-sink 1.35s var(--ease-zen) both;
+}
+@keyframes zen-enso-sink {
+  0% {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  30% {
+    transform: rotate(3deg) scale(0.7);
+    opacity: 0.92;
+  }
+  100% {
+    transform: rotate(7deg) scale(0.05);
+    opacity: 0;
+  }
+}
+
+/* 主笔：起笔厚重，行笔渐提，收锋轻细。 */
+.zen-enso-stroke {
+  stroke: color-mix(in srgb, var(--ink) 88%, var(--sandal) 12%);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation:
+    zen-enso-draw var(--stroke-dur) cubic-bezier(0.55, 0.08, 0.42, 0.96) 1.1s
+      forwards,
+    zen-enso-taper var(--stroke-dur) linear 1.1s forwards;
+}
+@keyframes zen-enso-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes zen-enso-taper {
+  0% {
+    stroke-width: 15;
+  }
+  70% {
+    stroke-width: 9;
+  }
+  96% {
+    stroke-width: 4.5;
+  }
+  100% {
+    stroke-width: 2.2;
+  }
+}
+
+/* 墨晕底层：笔过之处墨渗入纸纹，迟笔一拍、慢笔一寸。 */
+.zen-enso-bleed {
+  stroke: color-mix(in srgb, var(--ink) 72%, transparent);
+  stroke-width: 20;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0.16;
+  filter: blur(9px);
+  animation: zen-enso-draw calc(var(--stroke-dur) + 1200ms) linear 1.35s
+    forwards;
+}
+
+/* 飞白：枯笔掠过，纸色丝纹自中段渐显（纸色之外天然隐形）。 */
+.zen-enso-white {
+  stroke: var(--paper);
+  stroke-width: 4.2;
+  stroke-dasharray: 9 24;
+  opacity: 0;
+  animation: zen-enso-white var(--stroke-dur) linear 1.1s both;
+}
+@keyframes zen-enso-white {
+  0%,
+  52% {
+    opacity: 0;
+  }
+  74% {
+    opacity: 0.34;
+  }
+  100% {
+    opacity: 0.42;
+  }
+}
+
+/* 起笔顿锋：笔尖落纸的一瞬。 */
+.zen-enso-press {
+  fill: color-mix(in srgb, var(--ink) 85%, var(--sandal) 15%);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: zen-enso-press 0.9s var(--ease-zen) 1.1s both;
+}
+@keyframes zen-enso-press {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  25% {
+    opacity: 0.9;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+}
+
+/* 飞墨：笔锋经过时绽出的细小墨点。 */
+.zen-ink-speck {
+  fill: color-mix(in srgb, var(--ink) 78%, var(--sandal) 22%);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: zen-ink-speck 1.1s var(--ease-zen) var(--d) both;
+}
+@keyframes zen-ink-speck {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  18% {
+    opacity: 0.85;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+
+/* 呼吸字与心光：吸则字自雾中显形，呼则字散入雾里。 */
+.zen-breath {
+  position: absolute;
+  left: 50%;
+  top: var(--ritual-cy);
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.zen-breath::before {
+  content: '';
+  position: absolute;
+  width: 30vmin;
+  height: 30vmin;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--bamboo) 10%, transparent) 0 40%,
+    transparent 70%
+  );
+}
+.zen-breath-word {
+  font-family: var(--font-serif);
+  font-size: 6.4vmin;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  user-select: none;
+}
+.zen-breath-in .zen-breath-word {
+  animation: zen-word-in 2.2s var(--ease-zen) both;
+}
+@keyframes zen-word-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+    filter: blur(10px);
+  }
+  55% {
+    opacity: 0.95;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+.zen-breath-out .zen-breath-word {
+  animation: zen-word-out 2.6s var(--ease-zen) both;
+}
+@keyframes zen-word-out {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  60% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.07);
+    filter: blur(7px);
+  }
+}
+.zen-breath-in::before {
+  animation: zen-halo-in 2.2s var(--ease-zen) both;
+}
+@keyframes zen-halo-in {
+  from {
+    transform: scale(0.72);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+.zen-breath-out::before {
+  animation: zen-halo-out 2.6s var(--ease-zen) both;
+}
+@keyframes zen-halo-out {
+  from {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.75);
+    opacity: 0.42;
+  }
+}
+
+/* 沉底：圆相化作的墨点在屏心明灭一瞬，随水洗散去。 */
+.zen-breath-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 60%, var(--sandal) 20%);
+  box-shadow: 0 0 18px 2px color-mix(in srgb, var(--ink) 18%, transparent);
+  animation: zen-breath-dot 1.4s var(--ease-zen) both;
+}
+@keyframes zen-breath-dot {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  22% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  60% {
+    opacity: 0.6;
+    transform: scale(1.3) translateY(2px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.7) translateY(10px);
+  }
+}
+
+/* 金尘：绕圆缓升的微光，与稳态的微尘萤火一脉相承。 */
+.zen-gold {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--sandal) 62%, var(--bamboo) 38%);
+  opacity: 0;
+  animation: zen-gold var(--dur) linear var(--d) both;
+}
+@keyframes zen-gold {
+  0% {
+    opacity: 0;
+    transform: translateY(4vh) scale(0.8);
+  }
+  25% {
+    opacity: 0.5;
+  }
+  75% {
+    opacity: 0.26;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-7vh) scale(1);
+  }
+}
+
+/* 末息水洗：一圈澄明自屏心漫开，纱随之散尽。 */
+.zen-final-wash {
+  position: absolute;
+  left: 50%;
+  top: var(--ritual-cy);
+  width: 200vmax;
+  height: 200vmax;
+  margin: -100vmax 0 0 -100vmax;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--paper) 92%, transparent) 0 6%,
+    color-mix(in srgb, var(--paper-deep) 66%, transparent) 22%,
+    transparent 38%
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+.zen-ritual-sink .zen-final-wash {
+  animation: zen-final-wash 1.5s var(--ease-zen) both;
+}
+@keyframes zen-final-wash {
+  0% {
+    opacity: 0;
+    transform: scale(0.02);
+  }
+  35% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* 跳过提示：迟到半拍浮现，不与圆相争锋。 */
+.zen-ritual-skip {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 5.5%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dusk);
+  animation: zen-arrive 0.9s var(--ease-zen) 2.4s both;
+}
+
+/* ── 出定／速入：一口短促的雾过一眼。
+   出定时山月不现；关掉入定仪式时，也以这口雾作快速过场。 */
+
+.zen-veil-out-mist {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: var(--paper);
+  opacity: 0;
+  animation: zen-out-puff 0.6s var(--ease-zen) both;
+}
+@keyframes zen-out-puff {
+  0% {
+    opacity: 0;
+  }
+  38% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 禅境专属元素（Esc 提示、迷你香）迟到半拍浮现——乘纱将揭未揭之际，
+   如烟缓入。fill-mode both 保证延迟期内保持隐形。 */
+@keyframes zen-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.zen-arrive {
+  animation: zen-arrive 0.9s var(--ease-zen) 0.55s both;
 }

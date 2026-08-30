@@ -17,6 +17,7 @@ export type IconName =
   | 'plus'
   | 'minus'
   | 'sun'
+  | 'sunset'
   | 'moon'
   | 'refresh'
   | 'expand'
@@ -28,6 +29,8 @@ export type IconName =
   | 'eye'
   | 'breath'
   | 'figure'
+  | 'keyboard'
+  | 'chevron-down'
 
 const props = withDefaults(
   defineProps<{ name: IconName; size?: number; strokeWidth?: number }>(),
@@ -59,6 +62,8 @@ const ICONS: Record<IconName, string> = {
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.3 17.7-1.4 1.4"/><path d="m19.1 4.9-1.4 1.4"/>',
+  sunset:
+    '<path d="M12 9V3"/><path d="m5 6.5 1.5 1.5"/><path d="m19 6.5-1.5 1.5"/><path d="M3 15h2"/><path d="M19 15h2"/><path d="M7 15a5 5 0 0 1 10 0"/><path d="M2 19h20"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>',
   refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',
   expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
@@ -70,6 +75,9 @@ const ICONS: Record<IconName, string> = {
   eye: '<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
   breath: '<path d="M12.5 6.5A2.2 2.2 0 1 1 10.5 10H3"/><path d="M12.5 14.5A2.2 2.2 0 1 0 10.5 18.5H3"/>',
   figure: '<circle cx="12" cy="5" r="2"/><path d="M12 9v11"/><path d="M12 12l-4 2.5"/><path d="M12 12l4 2.5"/>',
+  keyboard:
+    '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01"/><path d="M10 9h.01"/><path d="M14 9h.01"/><path d="M18 9h.01"/><path d="M6 13h.01"/><path d="M10 13h.01"/><path d="M14 13h.01"/><path d="M18 13h.01"/><path d="M8 16h8"/>',
+  'chevron-down': '<path d="m6 9 6 6 6-6"/>',
 }
 
 const path = computed(() => ICONS[props.name] ?? '')

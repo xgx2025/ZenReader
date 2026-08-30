@@ -18,7 +18,7 @@ export const COPY = {
   zenMode: '禅境',
   fullscreen: '全屏',
   exitFullscreen: '退出全屏',
-  search: '寻',
+  search: '寻…',
   toc: '目录',
   notes: '觉悟笔记',
 
@@ -41,7 +41,7 @@ export const COPY = {
   cancel: '罢',
 
   words: '字',
-  minutes: '分',
+  minutes: '分钟',
 
   resumeReading: '接着上次',
   readingProgress: '读到',
@@ -68,6 +68,9 @@ export const COPY = {
   paragraphIndent: '段首缩进',
   justify: '两端对齐',
   immersiveFullscreen: '沉浸全屏',
+  immersiveFullscreenHint: '入禅境时自动进入全屏，出定一并退去；全屏本身不牵动禅境',
+  zenRitual: '入定仪式',
+  zenRitualHint: '以三次呼吸入定，呼气时世界一层层退去；轻触任意处可跳过',
   paperTexture: '纸纹',
   paperTextureOff: '无',
   paperTextureSubtle: '微',
@@ -120,6 +123,59 @@ export const COPY = {
   actEyes: '望远',
   actBreathe: '静息',
   remaining: '还剩',
+
+  // 散落文案收编（此前硬编码于各视图）
+  continueImport: '继续引卷',
+  vaultNotOpen: '请先打开书库，方能引卷入藏',
+  close: '关闭',
+  escToReturn: '按 Esc 返回',
+  zenInhale: '吸',
+  zenExhale: '呼',
+  zenSkipHint: '轻触任意处 · 跳过',
+  emptyToc: '卷中尚无章节',
+  emptyFolders: '尚无分组',
+
+  // 导入状态流转
+  importPending: '待引',
+  importReading: '读卷中',
+  importParsing: '解卷中',
+  importSaving: '藏卷中',
+  importStored: '已藏',
+  importSkippedDup: '已略过 · 同名',
+  importError: '有误',
+  importDuplicateHint: '同名卷已在库中，故而略过',
+  importUnknownError: '未知错误',
+
+  // 操作反馈（轻提示）
+  movedDone: '此卷已移妥',
+  removedDone: '已释怀，此卷随烟散去',
+  folderCreated: '分组已成',
+  noteSaved: '觉悟已存',
+  opFailed: '未能完成，请稍后再试',
+  vaultReadFailed: '书库难以读取，请确认目录仍可访问',
+  docOpenFailed: '未能打开此卷',
+  anchorCrossBlock: '暂只支持一段之内驻足',
+
+  // 加载态
+  loadingDoc: '翻卷中…',
+  loadingLibrary: '开卷中…',
+
+  // 拖拽引卷
+  dropToImport: '松手引卷入藏',
+
+  // 键径（快捷键速查）
+  shortcutSheet: '键径',
+  shortcutDown: '向下徐行',
+  shortcutUp: '向上回望',
+  shortcutSpace: '翻过一页（Shift 回翻）',
+  shortcutPrevChapter: '上一章',
+  shortcutNextChapter: '下一章',
+  shortcutToc: '目录开合',
+  shortcutNotes: '觉悟笔记开合',
+  shortcutZen: '禅境出入',
+  shortcutEsc: '层层退返',
+  shortcutFullscreen: '全屏切换',
+  shortcutSheetKey: '键径',
 } as const
 
 export type CopyKey = keyof typeof COPY

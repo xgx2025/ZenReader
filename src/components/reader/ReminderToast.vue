@@ -39,10 +39,10 @@ function onRelight() {
     <Transition name="fade-slide">
       <div
         v-if="reminderOpen"
-        class="pointer-events-auto fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2.5 rounded-full border bg-paper/95 px-4 py-2.5 shadow-[0_8px_28px_rgba(0,0,0,0.10)] backdrop-blur-sm transition-colors duration-300"
+        class="pointer-events-auto fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2.5 rounded-full border bg-paper/95 px-4 py-2.5 shadow-zen-md backdrop-blur-sm transition-colors duration-300"
         :class="
           reminderLevel === 2
-            ? 'border-bamboo/50 shadow-[0_10px_36px_rgba(0,0,0,0.16)] zen-breathe'
+            ? 'border-bamboo/50 shadow-zen-lg zen-breathe'
             : 'border-line'
         "
         @click="dismiss"

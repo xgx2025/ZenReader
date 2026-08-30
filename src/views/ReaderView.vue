@@ -10,12 +10,14 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import type { IconName } from '@/components/common/ZIcon.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
 import ReminderToast from '@/components/reader/ReminderToast.vue'
 import IncenseControl from '@/components/reader/IncenseControl.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
+import ShortcutSheet from '@/components/reader/ShortcutSheet.vue'
 
 import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
@@ -29,7 +31,11 @@ import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
+import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
+import { playZenEnterChime } from '@/lib/chime'
+import ZenMotes from '@/components/reader/ZenMotes.vue'
+import ZenRitual from '@/components/reader/ZenRitual.vue'
 import type { HighlightAnchor, Note } from '@/types/note'
 import type { ThemeName } from '@/types/settings'
 import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
@@ -41,14 +47,16 @@ const notesStore = useNotesStore()
 const settings = useSettingsStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
-const { isFullscreen, toggle: toggleFullscreen } = useFullscreen()
+const { isFullscreen, toggle: toggleFullscreen, setZen } = useFullscreen()
 const { start, stop, awayNotice, clearAwayNotice } = useZenClock()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
+const { notify } = useToast()
 
 const showToc = ref(false)
 const showNotes = ref(false)
+const showShortcuts = ref(false)
 const activeNoteId = ref<string | null>(null)
 
 interface ComposerState {
@@ -103,6 +111,13 @@ const anchors = computed<AppliedAnchor[]>(() =>
 
 const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
 
+/** 三态主题图标：明亮→日、暮色→落日、夜读→月。 */
+const THEME_ICON: Record<ThemeName, IconName> = {
+  light: 'sun',
+  sepia: 'sunset',
+  dark: 'moon',
+}
+
 // 香已点燃提示（由 IncenseControl 点香时触发）。
 const showLitNotice = ref(false)
 let litNoticeTimer: ReturnType<typeof setTimeout> | null = null
@@ -125,6 +140,76 @@ watch(awayNotice, (v) => {
   window.setTimeout(() => clearAwayNotice(), 2600)
 })
 
+/**
+ * 入定仪式的编排全部在 ZenRitual.vue（「一滴墨 · 一笔圆相」）内自导
+ * 自演：组件按时间线推进，经 stage 事件通知此处让世界逐层退去
+ * （1 顶栏化去 → 2 面板隐去边距舒展 → 3 稳态澄明，各 UI 层的显隐
+ * 由 ritualStage 门控）。轻触任意处可跳过，关掉「入定仪式」则以
+ * 一口短雾快速过场。
+ */
+/** 仪式阶段 0→3：0 世界完整；1 顶栏已化去；2 面板已隐、边距舒展；3 稳态澄明。 */
+const ritualStage = ref(0)
+const ritualActive = ref(false)
+/** 出定／速入共用的一口短促纸色雾（zen-out-puff）。 */
+const zenPuff = ref(false)
+let puffTimer: ReturnType<typeof setTimeout> | null = null
+
+// 持久化恢复 / 热重载 / 从书库返回时已处于禅境：直接落到稳态。
+// watch 只响应变化，此时不会触发；若不补这一拍，界面会停在
+// "阶段 0"（头栏可见、氛围未起），禅境按钮也会因值不变而失灵。
+if (settings.zenMode) ritualStage.value = 3
+
+function prefersReducedMotion() {
+  return (
+    typeof matchMedia === 'function' &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
+/** 一口短促的雾：出定时过一眼；关掉仪式时作速入过场。 */
+function puff() {
+  zenPuff.value = true
+  if (puffTimer) clearTimeout(puffTimer)
+  puffTimer = setTimeout(() => {
+    zenPuff.value = false
+  }, 700)
+}
+
+/** 仪式推进：世界退去一层。 */
+function onRitualStage(n: number) {
+  ritualStage.value = n
+}
+
+/** 轻触任意处：仪式立止，直达稳态。 */
+function skipRitual() {
+  ritualStage.value = 3
+  ritualActive.value = false
+}
+
+/** 仪式自终：纱已散尽，卸下覆盖层。 */
+function endRitual() {
+  ritualActive.value = false
+}
+
+watch(
+  () => settings.zenMode,
+  (zen) => {
+    if (zen) {
+      if (settings.reminder.chime) playZenEnterChime()
+      if (settings.zenRitual && !prefersReducedMotion()) {
+        ritualActive.value = true
+      } else {
+        ritualStage.value = 3
+        puff()
+      }
+    } else {
+      ritualActive.value = false
+      ritualStage.value = 0
+      puff()
+    }
+  },
+)
+
 // TOC anchors by heading id, so the active one can be kept in view.
 const tocItemEls = new Map<string, HTMLElement>()
 function setTocItemRef(id: string, el: unknown) {
@@ -145,12 +230,31 @@ function renderProse() {
   highlightCodeBlocks(el, settings.theme)
 }
 
+/** 局部更新：只为此条笔记包一层 <mark>，不整篇重建、不重跑代码高亮。 */
+function applyNoteAnchor(noteId: string, anchor: HighlightAnchor) {
+  const el = proseEl.value
+  if (!el) return
+  applyAnchors(el, [{ noteId, anchor }])
+}
+
+/** 局部更新：拆掉此条笔记的高亮，并把被分割的文本节点缝回去。 */
+function removeNoteAnchor(id: string) {
+  const mark = proseEl.value?.querySelector(`mark.hl[data-note-id="${id}"]`)
+  if (!mark?.parentNode) return
+  const parent = mark.parentNode
+  while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
+  parent.removeChild(mark)
+  parent.normalize()
+}
+
 async function loadDocument() {
   // Vue Router already decodes path params; relativePath may contain `/`.
   const relPath = route.params.path as string
   restoring.value = true
   const loaded = await reader.open(relPath)
   if (!loaded) {
+    // 打不开的卷不再无声消失，说明缘由再回书库。
+    notify(COPY.docOpenFailed, 'sandal')
     router.replace('/')
     return
   }
@@ -216,9 +320,14 @@ function makeFreeNote(note: string): Note {
 async function onHighlight() {
   const cap = capture.value
   if (!cap) return
-  await notesStore.add(makeNote(cap.anchor, '', 'highlight'))
-  dismiss()
-  renderProse()
+  const note = makeNote(cap.anchor, '', 'highlight')
+  try {
+    await notesStore.add(note)
+    applyNoteAnchor(note.id, cap.anchor)
+    dismiss()
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
 }
 
 function onOpenComposer() {
@@ -259,20 +368,26 @@ function onNewFreeNote() {
 async function onSaveNote(text: string) {
   const c = composer.value
   if (!c) return
-  if (c.noteId) {
-    const target = notesStore.notes.find((x) => x.id === c.noteId)
-    await notesStore.update(
-      c.noteId,
-      target?.kind === 'highlight' ? { note: text, kind: 'note' } : { note: text },
-    )
+  try {
+    if (c.noteId) {
+      // 编辑只改心得文本，锚点不变——正文无需任何重渲染。
+      const target = notesStore.notes.find((x) => x.id === c.noteId)
+      await notesStore.update(
+        c.noteId,
+        target?.kind === 'highlight' ? { note: text, kind: 'note' } : { note: text },
+      )
+    } else if (c.anchor) {
+      const note = makeNote(c.anchor, text, 'note')
+      await notesStore.add(note)
+      applyNoteAnchor(note.id, c.anchor)
+    } else {
+      await notesStore.add(makeFreeNote(text))
+    }
+    notify(COPY.noteSaved)
     composer.value = null
-  } else if (c.anchor) {
-    await notesStore.add(makeNote(c.anchor, text, 'note'))
-    composer.value = null
-    renderProse()
-  } else {
-    await notesStore.add(makeFreeNote(text))
-    composer.value = null
+  } catch {
+    // 留住弹层与已输入的内容，让用户知道没存上。
+    notify(COPY.opFailed, 'sandal')
   }
 }
 
@@ -286,9 +401,13 @@ async function onConfirmDelete() {
   const n = deleteTarget.value
   if (!n) return
   deleteTarget.value = null
-  await notesStore.remove(n.id)
-  if (activeNoteId.value === n.id) activeNoteId.value = null
-  renderProse()
+  try {
+    await notesStore.remove(n.id)
+    if (activeNoteId.value === n.id) activeNoteId.value = null
+    removeNoteAnchor(n.id)
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
 }
 
 function onProseClick(e: MouseEvent) {
@@ -381,7 +500,7 @@ function onKeydown(e: KeyboardEvent) {
       if (composerOpen.value) {
         composer.value = null
       } else if (settings.zenMode) {
-        settings.setZenMode(false)
+        setZen(false)
       } else if (showNotes.value) {
         showNotes.value = false
       } else if (showToc.value) {
@@ -418,7 +537,10 @@ function onKeydown(e: KeyboardEvent) {
       return
     case 'z':
     case 'Z':
-      settings.setZenMode(!settings.zenMode)
+      setZen(!settings.zenMode)
+      return
+    case '?':
+      showShortcuts.value = !showShortcuts.value
       return
   }
 }
@@ -442,6 +564,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  if (puffTimer) clearTimeout(puffTimer)
   stop()
   progressStore.flush()
 })
@@ -455,124 +578,152 @@ watch(() => route.params.path, loadDocument)
 
 <template>
   <div class="flex h-screen flex-col bg-paper text-ink">
+    <!-- 禅境氛围光：常驻透明层，仪式末息方才亮起（渐隐在 CSS 里过渡）；
+         微尘/萤火与之同息，为稳态添一点活气。 -->
+    <div
+      class="zen-ambient"
+      :class="{ 'zen-ambient-on': settings.zenMode && ritualStage >= 3 }"
+      aria-hidden="true"
+    ></div>
+    <ZenMotes
+      :active="settings.zenMode && ritualStage >= 3"
+      :theme="settings.theme"
+    />
+
     <!-- Top toolbar (hidden in 禅境; tucks away while scrolling down) -->
-    <header
-      v-if="!settings.zenMode"
-      class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2.5 transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
-      :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
-    >
-      <div class="flex min-w-0 items-center gap-1">
-        <IncenseControl
-          v-if="settings.reminder.enabled"
-          variant="toolbar"
-          @ignite="onIncenseIgnited"
-        />
-        <button
-          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          @click="router.push('/')"
-        >
-          <ZIcon name="back" :size="18" />
-        </button>
-        <span class="truncate font-serif text-base text-ink">
-          {{ doc?.title }}
-        </span>
-      </div>
-
-      <div class="flex shrink-0 items-center gap-1">
-        <button
-          class="flex h-9 items-center justify-center rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.toc"
-          @click="showToc = !showToc"
-        >
-          <ZIcon name="toc" :size="17" />
-        </button>
-
-        <span class="mx-1 h-5 w-px bg-line" />
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          @click="bumpFont(-1)"
-        >
-          <ZIcon name="minus" :size="15" />
-        </button>
-        <span class="w-6 text-center text-xs text-dusk">{{ settings.fontSize }}</span>
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          @click="bumpFont(1)"
-        >
-          <ZIcon name="plus" :size="15" />
-        </button>
-
-        <span class="mx-1 h-5 w-px bg-line" />
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          title="主题"
-          @click="cycleTheme"
-        >
-          <ZIcon :name="settings.theme === 'dark' ? 'moon' : 'sun'" :size="17" />
-        </button>
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :class="{ 'text-bamboo': settings.fontFamily === 'sans' }"
-          title="字体"
-          @click="toggleFontFamily"
-        >
-          <span class="font-serif text-sm">字</span>
-        </button>
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.settings"
-          @click="openPanel"
-        >
-          <ZIcon name="settings" :size="18" />
-        </button>
-
-        <span class="mx-1 h-5 w-px bg-line" />
-
-        <button
-          class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.notes"
-          @click="showNotes = !showNotes"
-        >
-          <ZIcon name="note" :size="16" />
-          <span v-if="notesStore.notes.length" class="text-xs text-sandal">
-            {{ notesStore.notes.length }}
+    <Transition name="zen-header">
+      <header
+        v-if="!settings.zenMode || ritualStage < 1"
+        class="header-fade relative flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
+      >
+        <div class="flex min-w-0 items-center gap-1">
+          <IncenseControl
+            v-if="settings.reminder.enabled"
+            variant="toolbar"
+            @ignite="onIncenseIgnited"
+          />
+          <button
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            @click="router.push('/')"
+          >
+            <ZIcon name="back" :size="18" />
+          </button>
+          <span class="truncate font-serif text-base text-ink">
+            {{ doc?.title }}
           </span>
-        </button>
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="isFullscreen ? COPY.exitFullscreen : COPY.fullscreen"
-          @click="toggleFullscreen"
-        >
-          <ZIcon :name="isFullscreen ? 'shrink' : 'expand'" :size="17" />
-        </button>
-
+        </div>
+  
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            class="flex h-9 items-center justify-center rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="COPY.toc"
+            @click="showToc = !showToc"
+          >
+            <ZIcon name="toc" :size="17" />
+          </button>
+  
+          <span class="mx-1 h-5 w-px bg-line" />
+  
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            @click="bumpFont(-1)"
+          >
+            <ZIcon name="minus" :size="15" />
+          </button>
+          <span class="w-6 text-center text-xs text-dusk">{{ settings.fontSize }}</span>
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            @click="bumpFont(1)"
+          >
+            <ZIcon name="plus" :size="15" />
+          </button>
+  
+          <span class="mx-1 h-5 w-px bg-line" />
+  
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="COPY.theme"
+            @click="cycleTheme"
+          >
+            <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
+          </button>
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :class="{ 'text-bamboo': settings.fontFamily === 'sans' }"
+            :title="COPY.font"
+            @click="toggleFontFamily"
+          >
+            <span class="font-serif text-sm">字</span>
+          </button>
+  
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="COPY.settings"
+            @click="openPanel"
+          >
+            <ZIcon name="settings" :size="18" />
+          </button>
+  
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="COPY.shortcutSheet"
+            @click="showShortcuts = true"
+          >
+            <ZIcon name="keyboard" :size="16" />
+          </button>
+  
+          <span class="mx-1 h-5 w-px bg-line" />
+  
+          <button
+            class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="COPY.notes"
+            @click="showNotes = !showNotes"
+          >
+            <ZIcon name="note" :size="16" />
+            <span v-if="notesStore.notes.length" class="text-xs text-sandal">
+              {{ notesStore.notes.length }}
+            </span>
+          </button>
+  
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="isFullscreen ? COPY.exitFullscreen : COPY.fullscreen"
+            @click="toggleFullscreen"
+          >
+            <ZIcon :name="isFullscreen ? 'shrink' : 'expand'" :size="17" />
+          </button>
+  
         <button
           class="flex h-9 items-center gap-1.5 rounded-full bg-bamboo/15 px-3 text-sm text-bamboo transition-colors hover:bg-bamboo/25"
           :title="COPY.zenMode"
-          @click="settings.setZenMode(!settings.zenMode)"
+          @click="setZen(true)"
         >
           <ZIcon name="zen" :size="16" />
           {{ COPY.zenMode }}
         </button>
-      </div>
-    </header>
+        </div>
+      </header>
+    </Transition>
 
     <div class="relative flex min-h-0 flex-1">
       <!-- TOC sidebar -->
       <Transition name="fade-slide">
         <aside
-          v-if="showToc && !settings.zenMode"
+          v-if="showToc && (!settings.zenMode || ritualStage < 2)"
           class="flex w-64 shrink-0 flex-col overflow-hidden border-r border-line"
         >
           <div class="border-b border-line px-4 py-3">
             <h2 class="font-serif text-base">{{ COPY.toc }}</h2>
           </div>
           <nav class="flex-1 space-y-0.5 overflow-y-auto p-3">
-            <p v-if="toc.length === 0" class="px-2 text-sm text-dusk">无</p>
+            <p
+              v-if="toc.length === 0"
+              class="flex flex-col items-center px-2 py-6 text-xs text-dusk"
+            >
+              <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
+              <span class="mt-3">{{ COPY.emptyToc }}</span>
+            </p>
             <a
               v-for="item in toc"
               :key="item.id"
@@ -596,10 +747,19 @@ watch(() => route.params.path, loadDocument)
       <!-- Reading surface -->
       <div ref="containerRef" class="min-w-0 flex-1 overflow-y-auto">
         <div
-          class="px-6 py-10 md:px-12"
-          :class="{ 'py-16': settings.zenMode }"
+          class="px-6 py-10 transition-[padding] duration-700 ease-zen md:px-12"
+          :class="{ 'py-16': settings.zenMode && ritualStage >= 2 }"
         >
+          <!-- 翻卷中：首次打开文档时的呼吸圆点 -->
+          <div
+            v-if="reader.loading && !doc"
+            class="flex flex-col items-center py-32 text-dusk"
+          >
+            <div class="zen-breathe h-2 w-2 rounded-full bg-bamboo/50"></div>
+            <p class="mt-6 font-serif text-lg">{{ COPY.loadingDoc }}</p>
+          </div>
           <article
+            v-else
             ref="proseEl"
             class="zen-prose"
             :data-indent="settings.paragraphIndent ? 'true' : 'false'"
@@ -612,7 +772,7 @@ watch(() => route.params.path, loadDocument)
       <!-- Notes panel -->
       <Transition name="fade-slide">
         <aside
-          v-if="showNotes && !settings.zenMode"
+          v-if="showNotes && (!settings.zenMode || ritualStage < 2)"
           class="w-80 shrink-0 border-l border-line"
         >
           <NotesPanel
@@ -638,20 +798,19 @@ watch(() => route.params.path, loadDocument)
       />
     </div>
 
-    <!-- 禅境 exit hint -->
-    <Transition name="fade">
-      <p
-        v-if="settings.zenMode"
-        class="pointer-events-none fixed bottom-5 right-5 text-xs text-dusk"
-      >
-        按 Esc 返回
-      </p>
-    </Transition>
+    <!-- 禅境 exit hint：乘纱将揭未揭之际迟到半拍浮现（zen-arrive），
+         出定时随眨纱同息，无需离场动画。 -->
+    <p
+      v-if="settings.zenMode && ritualStage >= 3"
+      class="zen-arrive pointer-events-none fixed bottom-5 right-5 text-xs text-dusk"
+    >
+      {{ COPY.escToReturn }}
+    </p>
 
     <!-- 禅境迷你香 -- header 已隐，唯香常随 -->
     <div
-      v-if="settings.zenMode && settings.reminder.enabled"
-      class="fixed right-4 top-4 z-30"
+      v-if="settings.zenMode && settings.reminder.enabled && ritualStage >= 3"
+      class="zen-arrive fixed right-4 top-4 z-30"
     >
       <IncenseControl variant="zen" @ignite="onIncenseIgnited" />
     </div>
@@ -660,7 +819,7 @@ watch(() => route.params.path, loadDocument)
     <Transition name="fade">
       <p
         v-if="awayNotice"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
       >
         <ZIcon name="incense" :size="13" class="text-dusk" />
         {{ COPY.awayNotice }}
@@ -671,7 +830,7 @@ watch(() => route.params.path, loadDocument)
     <Transition name="fade">
       <p
         v-if="showResumeHint"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
       >
         <ZIcon name="bookmark" :size="13" class="text-sandal" />
         {{ COPY.resumeReading }}
@@ -682,7 +841,7 @@ watch(() => route.params.path, loadDocument)
     <Transition name="fade">
       <p
         v-if="showLitNotice"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
       >
         <ZIcon name="incense" :size="13" class="text-sandal" />
         {{ litNoticeText }}
@@ -714,7 +873,28 @@ watch(() => route.params.path, loadDocument)
       @close="deleteTarget = null"
     />
 
+    <ShortcutSheet
+      :open="showShortcuts"
+      @close="showShortcuts = false"
+    />
+
     <ReminderToast />
+
+    <!-- 入定仪式「一滴墨 · 一笔圆相」：纱起、墨滴落纸、一笔圆相绕心
+         而书，每次呼气墨晕漫过全屏、世界退去一层，末息圆相收作墨点
+         沉底、水洗漫开纱散。轻触任意处可跳过（编排见 ZenRitual.vue，
+         时序见 motion.css「一滴墨 · 一笔圆相」一节）。 -->
+    <Transition name="fade">
+      <ZenRitual
+        v-if="ritualActive"
+        @stage="onRitualStage"
+        @skip="skipRitual"
+        @finish="endRitual"
+      />
+    </Transition>
+
+    <!-- 出定／速入的短雾 -->
+    <div v-if="zenPuff" class="zen-veil-out-mist" aria-hidden="true"></div>
 
   </div>
 </template>

@@ -14,6 +14,8 @@ import { parseFrontmatter } from '@/lib/markdown/frontmatter'
 import { countWords, computeReadingTime, makeExcerpt } from '@/lib/markdown/structure'
 import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
+import { useToast } from '@/composables/useToast'
+import { COPY } from '@/lib/copy'
 import type { VaultFile, FolderNode } from '@/types/document'
 
 type SortKey = 'modified' | 'title'
@@ -22,8 +24,12 @@ type SortKey = 'modified' | 'title'
 export interface IndexedMeta {
   title: string
   excerpt: string
+  /** 全文纯文本，仅驻内存供书库全文搜索（不持久化）。 */
+  fullText: string
   wordCount: number
   readingTime: number
+  /** 索引时的文件修改时间：刷新时相同则沿用，不再重复解析。 */
+  mtime: number
 }
 
 function collectFolderPaths(nodes: FolderNode[], acc: string[]): void {
@@ -113,7 +119,9 @@ export const useLibraryStore = defineStore('library', () => {
         const title = meta?.title ?? resolveTitle({}, f.name)
         return (
           title.toLowerCase().includes(q) ||
-          (meta?.excerpt ?? '').toLowerCase().includes(q)
+          (meta?.excerpt ?? '').toLowerCase().includes(q) ||
+          // 全文检索：中后部内容同样可寻。
+          (meta?.fullText ?? '').toLowerCase().includes(q)
         )
       })
     }
@@ -151,12 +159,19 @@ export const useLibraryStore = defineStore('library', () => {
       const listing = await nativeFs.readVault(settings.vaultPath)
       files.value = listing.files
       dirs.value = listing.dirs
-      index.value = {}
+      // 增量索引：只清掉已消失的文件，未变更者沿用旧索引——
+      // 窗口聚焦等频繁刷新不再让卡片元信息闪烁。
+      const live = new Set(listing.files.map((f) => f.relativePath))
+      for (const key of Object.keys(index.value)) {
+        if (!live.has(key)) delete index.value[key]
+      }
       indexVault(listing.files)
     } catch (e) {
       console.error('[zenreader] read_vault failed', e)
       files.value = []
       dirs.value = []
+      // 读库失败不再静默成「尚无书籍」，轻声告知用户原因。
+      useToast().notify(COPY.vaultReadFailed, 'sandal')
     } finally {
       loading.value = false
     }
@@ -213,6 +228,8 @@ export const useLibraryStore = defineStore('library', () => {
     const gen = ++indexGen
     for (const f of list) {
       if (gen !== indexGen) return // superseded by a newer refresh
+      // mtime 未变即内容未变，直接沿用已有索引。
+      if (index.value[f.relativePath]?.mtime === f.mtime) continue
       try {
         const source = await nativeFs.readFile(f.path)
         const { data, content } = parseFrontmatter(source)
@@ -221,8 +238,10 @@ export const useLibraryStore = defineStore('library', () => {
         index.value[f.relativePath] = {
           title: resolveTitle(data, f.name),
           excerpt: makeExcerpt(plainText),
+          fullText: plainText,
           wordCount,
           readingTime: computeReadingTime(wordCount),
+          mtime: f.mtime,
         }
       } catch {
         // leave unindexed; the card falls back to the file name

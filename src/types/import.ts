@@ -12,6 +12,8 @@ export interface ImportItem {
   folderPath: string
   status: ImportStatus
   error?: string
+  /** 非错误的说明（如同名略过），展示在状态位。 */
+  reason?: string
 }
 
 export interface ImportResult {
