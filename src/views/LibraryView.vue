@@ -153,13 +153,33 @@ function onWindowFocus() {
   library.refresh()
 }
 
+/** 搜索框引用：清空后回焦、`/` 键直达。 */
+const searchInput = ref<HTMLInputElement | null>(null)
+const searchFocused = ref(false)
+
+function clearSearch() {
+  library.search = ''
+  searchInput.value?.focus()
+}
+
+/** 非输入态按 `/` 直达寻书。 */
+function onGlobalKey(e: KeyboardEvent) {
+  if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+  const t = e.target as HTMLElement
+  if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
+  e.preventDefault()
+  searchInput.value?.focus()
+}
+
 onMounted(() => {
   library.refresh()
   window.addEventListener('focus', onWindowFocus)
+  window.addEventListener('keydown', onGlobalKey)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('focus', onWindowFocus)
+  window.removeEventListener('keydown', onGlobalKey)
 })
 </script>
 
@@ -300,10 +320,27 @@ onBeforeUnmount(() => {
               <ZIcon name="search" :size="16" />
             </span>
             <input
+              ref="searchInput"
               v-model="library.search"
               :placeholder="COPY.search"
-              class="w-full rounded-full bg-paper-deep/60 py-2 pl-9 pr-4 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
+              class="w-full rounded-full bg-paper-deep/60 py-2 pl-9 pr-9 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
+              @focus="searchFocused = true"
+              @blur="searchFocused = false"
             />
+            <button
+              v-if="library.search"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-dusk transition-colors hover:text-ink"
+              aria-label="清空寻词"
+              @click="clearSearch"
+            >
+              <ZIcon name="close" :size="14" />
+            </button>
+            <kbd
+              v-else-if="!searchFocused"
+              class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-line bg-paper-deep/60 px-1.5 py-0.5 font-mono text-[11px] leading-none text-dusk"
+            >
+              /
+            </kbd>
           </div>
 
           <div class="flex rounded-full bg-paper-deep/60 p-0.5">

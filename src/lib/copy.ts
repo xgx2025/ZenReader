@@ -6,6 +6,7 @@
 export const COPY = {
   appName: '禅阅读',
   appNameLatin: 'ZenReader',
+  appTitle: 'ZenReader · 禅阅读',
   tagline: '阅·见本心',
 
   library: '书库',
@@ -39,6 +40,10 @@ export const COPY = {
   deleteNoteHint: '此觉悟将随烟散去，不可复回。',
   save: '存',
   cancel: '罢',
+  copyCode: '复制',
+  copied: '已复制',
+  backToTop: '回到卷首',
+  shortcutTopBottom: '卷首 · 卷尾',
 
   words: '字',
   minutes: '分钟',

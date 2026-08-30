@@ -49,11 +49,14 @@
   --color-line: var(--line);
   --color-ember: var(--ember);
 
-  /* Noto Serif SC（可变字体）必须排在 Source Han Serif SC 之前：只装了单字重
-     文件（如 "Source Han Serif SC Heavy"）的机器会以排版族名注册出仅含 900
-     字面的 "Source Han Serif SC"，导致正文/加粗/标题全部渲染成同一粗细。 */
-  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun",
-    serif;
+  /* 衬线栈以随包分发的 "Noto Serif SC Variable"（unicode-range 分片，按需
+     加载）开头——阅读观感不再取决于用户装没装字体；系统里真装了 Noto /
+     思源宋的机器也轮不到它们出场。系统 Noto Serif SC（可变字体）必须排在
+     Source Han Serif SC 之前：只装了单字重文件（如 "Source Han Serif SC
+     Heavy"）的机器会以排版族名注册出仅含 900 字面的 "Source Han Serif SC"，
+     导致正文/加粗/标题全部渲染成同一粗细。 */
+  --font-serif: "Noto Serif SC Variable", "Noto Serif SC",
+    "Source Han Serif SC", "Songti SC", "SimSun", serif;
   --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 
   --ease-zen: cubic-bezier(0.4, 0, 0.2, 1);

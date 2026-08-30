@@ -22,6 +22,8 @@ export function useReadingScroll(
   const activeHeadingId = ref('')
   /** True while the top toolbar should be tucked away. */
   const toolbarHidden = ref(false)
+  /** 当前滚动位移（px），供回到顶部等浮层判断去留。 */
+  const scrollTopPx = ref(0)
 
   const ACTIVE_OFFSET = 120 // px below container top where a heading "counts"
   const HIDE_MIN_SCROLL = 64 // don't hide before the reader has moved a bit
@@ -46,6 +48,7 @@ export function useReadingScroll(
     activeHeadingId.value = current
 
     const y = el.scrollTop
+    scrollTopPx.value = y
     const delta = y - lastY
     if (delta > HIDE_DELTA && y > HIDE_MIN_SCROLL) {
       toolbarHidden.value = true
@@ -107,6 +110,7 @@ export function useReadingScroll(
     containerRef,
     activeHeadingId,
     toolbarHidden,
+    scrollTopPx,
     scrollByFraction,
     scrollToHeading,
     restoreRatio,

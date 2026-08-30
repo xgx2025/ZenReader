@@ -60,6 +60,8 @@ export const useSettingsStore = defineStore('settings', {
         const raw = await nativeFs.readSettings()
         if (raw != null) {
           this.$patch(mergeSettings(JSON.parse(raw) as Partial<ReaderSettings>))
+          // 镜像到 localStorage：index.html 的首帧防闪烁脚本只读得到这里。
+          this.mirrorLocal()
         } else {
           const legacy = localStorage.getItem(STORAGE_KEY)
           if (legacy) {
@@ -93,12 +95,25 @@ export const useSettingsStore = defineStore('settings', {
     /** Persist to the settings file (Tauri) or localStorage (browser). */
     persist() {
       const json = JSON.stringify(this.$state)
+      this.mirrorLocal()
       if (isTauri()) {
         return nativeFs.writeSettings(json).catch((e) => {
           console.error('[zenreader] write settings failed', e)
         })
       }
-      localStorage.setItem(STORAGE_KEY, json)
+    },
+
+    /**
+     * 把当前设置镜像进 localStorage。Tauri 下 settings.json 才是真源，
+     * 但 index.html 的首帧防闪烁内联脚本读不到文件、只读得到 localStorage
+     * ——不镜像的话，改过主题的机器首帧会闪回遗留的旧主题。
+     */
+    mirrorLocal() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.$state))
+      } catch {
+        /* 隐私模式等存不进去就算了，不影响主存储 */
+      }
     },
 
     /** Debounced persist：高频更新（滑杆拖动）只落最后一次。 */

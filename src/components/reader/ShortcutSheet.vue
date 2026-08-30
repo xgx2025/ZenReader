@@ -10,6 +10,7 @@ const ROWS: { keys: string[]; label: string }[] = [
   { keys: ['J', 'K'], label: `${COPY.shortcutDown} · ${COPY.shortcutUp}` },
   { keys: ['空格'], label: COPY.shortcutSpace },
   { keys: ['←', '→'], label: `${COPY.shortcutPrevChapter} · ${COPY.shortcutNextChapter}` },
+  { keys: ['Home', 'End'], label: COPY.shortcutTopBottom },
   { keys: ['T'], label: COPY.shortcutToc },
   { keys: ['N'], label: COPY.shortcutNotes },
   { keys: ['Z'], label: COPY.shortcutZen },

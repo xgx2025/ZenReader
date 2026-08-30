@@ -14,6 +14,7 @@ import type { IconName } from '@/components/common/ZIcon.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
 import ReminderToast from '@/components/reader/ReminderToast.vue'
+import ImageViewer from '@/components/reader/ImageViewer.vue'
 import IncenseControl from '@/components/reader/IncenseControl.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
@@ -22,6 +23,7 @@ import ShortcutSheet from '@/components/reader/ShortcutSheet.vue'
 import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
 import { renderMermaidBlocks } from '@/lib/markdown/mermaid'
+import { wireCodeCopy } from '@/lib/markdown/codeCopy'
 import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
 import { useReadingScroll } from '@/composables/useReadingScroll'
@@ -84,6 +86,15 @@ const structure = computed(() =>
 const toc = computed(() => structure.value.toc)
 const headingIds = computed(() => toc.value.map((t) => t.id))
 
+// 窗口标题随书名走：任务栏 / Alt+Tab 一眼可见正在读哪卷。
+watch(
+  doc,
+  (d) => {
+    document.title = d ? `${d.title} · ${COPY.appName}` : COPY.appTitle
+  },
+  { immediate: true },
+)
+
 function onScrollProgress(ratio: number) {
   const d = reader.current
   if (!d || restoring.value) return
@@ -102,10 +113,24 @@ const {
   containerRef,
   activeHeadingId,
   toolbarHidden,
+  scrollTopPx,
   scrollByFraction,
   scrollToHeading: scrollToHeadingEl,
   restoreRatio,
 } = useReadingScroll(headingIds, onScrollProgress)
+
+/** 行至半卷（约 1.5 屏）后方浮现的回到卷首。 */
+const showBackTop = computed(() => scrollTopPx.value > window.innerHeight * 1.5)
+
+/** 图片灯箱：正文 img 点击后的放大查看。 */
+const viewerSrc = ref<string | null>(null)
+
+/** 平滑滚到卷首 / 卷尾（Home / End / 回到卷首共用）。 */
+function scrollToEdge(edge: 'top' | 'bottom') {
+  const el = containerRef.value
+  if (!el) return
+  el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight, behavior: 'smooth' })
+}
 const anchors = computed<AppliedAnchor[]>(() =>
   notesStore.notes
     .filter((n): n is Note & { anchor: HighlightAnchor } => n.anchor !== null)
@@ -233,6 +258,7 @@ function renderProse() {
   // mermaid 先行把 `language-mermaid` 块替换为图卡，shiki 便不会再碰它们。
   renderMermaidBlocks(el, settings.theme)
   highlightCodeBlocks(el, settings.theme)
+  wireCodeCopy(el)
 }
 
 /** 局部更新：只为此条笔记包一层 <mark>，不整篇重建、不重跑代码高亮。 */
@@ -429,7 +455,12 @@ function onProseClick(e: MouseEvent) {
     return
   }
   const anchor = target.closest('a[href]')
-  if (!anchor) return
+  if (!anchor) {
+    // 无链之图：入灯箱静观（带链的图交给链接逻辑）。
+    const img = target.closest('img')
+    if (img) viewerSrc.value = img.getAttribute('src')
+    return
+  }
   const href = anchor.getAttribute('href') ?? ''
   if (!href || href.startsWith('#')) return // 页内锚点（含脚注）走默认行为
   if (EXTERNAL_HREF.test(href)) {
@@ -558,6 +589,12 @@ function onKeydown(e: KeyboardEvent) {
     case 'ArrowLeft':
       jumpChapter(-1)
       return
+    case 'Home':
+      scrollToEdge('top')
+      return
+    case 'End':
+      scrollToEdge('bottom')
+      return
     case 't':
     case 'T':
       showToc.value = !showToc.value
@@ -597,6 +634,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  document.title = COPY.appTitle
   if (puffTimer) clearTimeout(puffTimer)
   stop()
   progressStore.flush()
@@ -910,6 +948,20 @@ watch(() => route.params.path, loadDocument)
       :open="showShortcuts"
       @close="showShortcuts = false"
     />
+
+    <!-- 回到卷首：行至半卷方才浮现，回顶即隐；禅境不设，免扰清净。 -->
+    <Transition name="fade">
+      <button
+        v-if="showBackTop && !settings.zenMode"
+        class="fixed bottom-6 right-6 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-paper/90 font-serif text-sm text-ink-soft shadow-zen-sm backdrop-blur-sm transition-colors hover:text-ink"
+        :title="COPY.backToTop"
+        @click="scrollToEdge('top')"
+      >
+        顶
+      </button>
+    </Transition>
+
+    <ImageViewer :src="viewerSrc" @close="viewerSrc = null" />
 
     <ReminderToast />
 

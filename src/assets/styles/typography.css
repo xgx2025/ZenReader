@@ -83,6 +83,18 @@
 .zen-prose a:hover {
   border-bottom-color: var(--bamboo);
 }
+/* 外链标识：一枚淡色 ↗，提示此链将离卷而去。 */
+.zen-prose a[target='_blank']::after {
+  content: '↗';
+  margin-left: 0.25em;
+  font-size: 0.7em;
+  vertical-align: 0.15em;
+  color: var(--dusk);
+  transition: color var(--motion-fast) var(--ease-zen);
+}
+.zen-prose a[target='_blank']:hover::after {
+  color: var(--bamboo);
+}
 
 .zen-prose strong {
   font-weight: 700;
@@ -134,6 +146,7 @@
 }
 
 .zen-prose pre {
+  position: relative;
   margin: 1.6em 0;
   padding: 1.2em 1.4em;
   background: var(--paper-deep);
@@ -141,6 +154,43 @@
   border-radius: 8px;
   overflow-x: auto;
   transition: background-color var(--motion-base) var(--ease-zen);
+}
+/* 代码块「复制」：图标态悬浮右上，hover / 键盘聚焦方现；
+   点击后转竹青「已复制」，等宽切换不跳动。 */
+.zen-prose pre .code-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  min-width: 2.5rem;
+  min-height: 1.4rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dusk);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  opacity: 0;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition:
+    opacity 200ms var(--ease-zen),
+    color 200ms var(--ease-zen);
+}
+.zen-prose pre .code-copy svg {
+  display: block;
+}
+.zen-prose pre:hover .code-copy,
+.zen-prose pre .code-copy:focus-visible {
+  opacity: 1;
+}
+.zen-prose pre .code-copy:hover {
+  color: var(--ink);
+}
+.zen-prose pre .code-copy-done {
+  color: var(--bamboo);
 }
 .zen-prose pre code {
   background: transparent;
@@ -203,6 +253,7 @@
   margin: 1.6em auto;
   display: block;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  cursor: zoom-in;
 }
 
 .zen-prose hr {
