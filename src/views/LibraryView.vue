@@ -235,7 +235,10 @@ onBeforeUnmount(() => {
           :class="{ 'bg-bamboo/15 font-medium text-ink': !library.selectedFolder }"
           @click="library.selectedFolder = ''"
         >
-          <span>{{ COPY.library }}</span>
+          <span class="flex items-center gap-1.5">
+            <ZIcon name="library" :size="14" class="shrink-0 text-bamboo/70" />
+            {{ COPY.library }}
+          </span>
           <span class="text-xs text-dusk">{{ library.totalCount }}</span>
         </button>
 
