@@ -81,7 +81,7 @@ export const COPY = {
   zenEntryLeaf: '落叶',
   zenEntryLeafHint: '一叶知秋，风起万叶；暮色四合，万叶栖水，末叶点水澄明自现',
   zenEntryIncense: '香篆',
-  zenEntryIncenseHint: '一炷香火星微明，烟丝袅袅，光随烟聚，散处凝作一点澄明',
+  zenEntryIncenseHint: '万点香尘洒落成一篆，火星循篆而行、烟起成书；篆尽烟敛，万缕归作一点澄明',
   zenEntryGalaxy: '星河',
   zenEntryGalaxyHint:
     '夜幕徐合，万点星尘旋成星河，随呼吸涨落；万点归一凝作一滴，坠入砚心，涟漪散尽澄明',
