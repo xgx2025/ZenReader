@@ -54,6 +54,11 @@ export const nativeFs = {
     return invoke('move_file', { from, to })
   },
 
+  /** Delete an empty 分组 inside the vault; refuses any folder still holding files. */
+  removeFolder(dir: string, relativePath: string): Promise<void> {
+    return invoke('remove_folder', { dir, relativePath })
+  },
+
   /** Read the persisted settings JSON from the app config dir; null if absent. */
   readSettings(): Promise<string | null> {
     return invoke<string | null>('read_settings')

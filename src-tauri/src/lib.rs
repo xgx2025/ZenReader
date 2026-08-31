@@ -146,6 +146,35 @@ fn move_file(from: String, to: String) -> Result<(), String> {
     std::fs::rename(&from, &to).map_err(|e| e.to_string())
 }
 
+/// Delete an empty 分组 inside the vault. The directory tree (including
+/// sub-directories) must contain no files at all, or the command refuses —
+/// 分组 must be emptied before it can be 释怀, so real `.md` files are never
+/// touched. `relative_path` is a `/`-separated path relative to the vault root.
+#[tauri::command]
+fn remove_folder(dir: String, relative_path: String) -> Result<(), String> {
+    // 防御：分组路径应始终落在书库内——拒绝空路径、绝对路径、根相对路径
+    // （Windows 下 `/` 开头的路径不算 is_absolute，但 join 会逃出书库）与 `..`。
+    if relative_path.is_empty()
+        || Path::new(&relative_path).is_absolute()
+        || relative_path.starts_with('/')
+        || relative_path.starts_with('\\')
+        || relative_path.split(['/', '\\']).any(|seg| seg == "..")
+    {
+        return Err("非法分组路径".into());
+    }
+    let target = Path::new(&dir).join(&relative_path);
+    if !target.is_dir() {
+        return Err(format!("分组不存在：{relative_path}"));
+    }
+    for entry in walkdir::WalkDir::new(&target).into_iter() {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_type().is_file() {
+            return Err(format!("分组非空：{relative_path}"));
+        }
+    }
+    std::fs::remove_dir_all(&target).map_err(|e| e.to_string())
+}
+
 /// Absolute path to the app-level settings file inside the OS config directory
 /// (e.g. `~/.config/com.zenreader.app/settings.json` on Linux,
 /// `%APPDATA%\com.zenreader.app\settings.json` on Windows).
@@ -175,6 +204,42 @@ fn write_settings(app: tauri::AppHandle, content: String) -> Result<(), String> 
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 分组删除只允许空分组：含文件的目录拒绝且保留，空树整体删除。
+    #[test]
+    fn remove_folder_only_when_empty() {
+        let base = std::env::temp_dir().join(format!(
+            "zenreader-folder-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("vault");
+        std::fs::create_dir_all(root.join("a/b")).unwrap(); // a 只含空子目录 b
+        std::fs::create_dir_all(root.join("c")).unwrap();
+        std::fs::write(root.join("c/doc.md"), "x").unwrap();
+        let dir = root.to_string_lossy().into_owned();
+
+        // c 含文件 → 拒绝，且目录仍在。
+        assert!(remove_folder(dir.clone(), "c".into()).is_err());
+        assert!(root.join("c").is_dir());
+
+        // 空分组 a（含空子目录 b）→ 整棵空树一并删除。
+        assert!(remove_folder(dir.clone(), "a".into()).is_ok());
+        assert!(!root.join("a").exists());
+
+        // 路径防御：`..`、根相对、绝对路径一律拒绝。
+        assert!(remove_folder(dir.clone(), "..".into()).is_err());
+        assert!(remove_folder(dir.clone(), "../x".into()).is_err());
+        assert!(remove_folder(dir.clone(), "/abs".into()).is_err());
+        assert!(remove_folder(dir.clone(), "".into()).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -190,6 +255,7 @@ pub fn run() {
             delete_file,
             create_dir,
             move_file,
+            remove_folder,
             read_settings,
             write_settings,
             notes::notes_list,

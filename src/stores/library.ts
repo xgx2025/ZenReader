@@ -189,6 +189,22 @@ export const useLibraryStore = defineStore('library', () => {
     await refresh()
   }
 
+  /**
+   * Delete an empty 分组 (only empty folders can be 释怀). Refuses folders
+   * that still hold any files — the error surfaces as a toast in the view.
+   */
+  async function removeFolder(relativePath: string) {
+    await nativeFs.removeFolder(settings.vaultPath, relativePath)
+    // 选中的分组若正是被删的分组（或其下），退回根分组。
+    if (
+      selectedFolder.value === relativePath ||
+      selectedFolder.value.startsWith(`${relativePath}/`)
+    ) {
+      selectedFolder.value = ''
+    }
+    await refresh()
+  }
+
   /** Move a document's file on disk, migrating its notes to the new path. */
   async function moveDocument(from: string, to: string) {
     await nativeFs.moveFile(
@@ -251,6 +267,7 @@ export const useLibraryStore = defineStore('library', () => {
     refresh,
     openVault,
     createFolder,
+    removeFolder,
     moveDocument,
     removeDocument,
   }
