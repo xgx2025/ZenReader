@@ -1,6 +1,6 @@
 [package]
 name = "zenreader"
-version = "0.1.0"
+version = "0.1.2"
 description = "ZenReader · 禅阅读 — 本地优先的 Markdown 阅读器"
 authors = ["谢光湘"]
 edition = "2021"
