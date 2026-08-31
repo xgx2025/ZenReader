@@ -228,6 +228,40 @@
   white-space: pre-wrap;
 }
 
+/* LaTeX 公式（KaTeX）：字色随纸墨主题继承（.katex 不强制颜色），行内随文、
+   行间居中。字体用 KaTeX 自带的衬线数学字体，不受正文字体设置影响。 */
+.zen-prose .zen-math-inline {
+  white-space: nowrap;
+}
+/* `$$…$$` 嵌在段落中间时的行内形态：保留 display 档的更大字号，
+   但不再另起一行居中。 */
+.zen-prose .zen-math-inline .katex-display {
+  display: inline;
+  margin: 0;
+  text-align: inherit;
+}
+/* 行间公式：与代码块同款横向滚动，超宽公式不至于撑破版面。 */
+.zen-prose .zen-math-block {
+  margin: 0.6em 0 1.4em;
+  padding: 0.2em 0;
+  overflow-x: auto;
+}
+.zen-prose .zen-math-block .katex-display {
+  margin: 0.2em 0;
+}
+/* 带编号的行间公式（`$$…$$(1)`）：编号贴右缘居中。 */
+.zen-prose .zen-math-block-eqno {
+  position: relative;
+}
+.zen-prose .zen-math-block-eqno .zen-math-eqno {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  color: var(--dusk);
+  font-size: 0.9em;
+}
+
 .zen-prose table {
   margin: 1.6em 0;
   border-collapse: collapse;

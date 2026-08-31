@@ -325,9 +325,7 @@ function makeNote(anchor: HighlightAnchor, note: string, kind: Note['kind']): No
     kind,
     quote: anchor.quote,
     note,
-    // Spread strips the Vue reactive Proxy — IndexedDB's structured clone
-    // rejects Proxy objects (DataCloneError).
-    anchor: { ...anchor },
+    anchor,
     createdAt: ts,
     updatedAt: ts,
   }

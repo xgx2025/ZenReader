@@ -65,6 +65,34 @@ function closeMenu() {
   menu.value.open = false
 }
 
+// 分组操作：右击侧栏分组 → 释怀（仅空分组可删）。
+const folderMenu = ref<{ open: boolean; x: number; y: number; path: string }>({
+  open: false,
+  x: 0,
+  y: 0,
+  path: '',
+})
+
+function openFolderMenu(e: { path: string; x: number; y: number }) {
+  folderMenu.value = { open: true, x: e.x, y: e.y, path: e.path }
+}
+
+function closeFolderMenu() {
+  folderMenu.value.open = false
+}
+
+async function onRemoveFolder() {
+  const path = folderMenu.value.path
+  closeFolderMenu()
+  if (!path) return
+  try {
+    await library.removeFolder(path)
+    notify(COPY.folderRemoved, 'bamboo')
+  } catch {
+    notify(COPY.folderNotEmpty, 'sandal')
+  }
+}
+
 function onMenuMove() {
   const file = menu.value.file
   closeMenu()
@@ -303,6 +331,7 @@ onBeforeUnmount(() => {
           :nodes="library.folderTree"
           :selected="library.selectedFolder"
           @select="toggleFolder"
+          @menu="openFolderMenu"
         />
         <p
           v-else
@@ -423,6 +452,21 @@ onBeforeUnmount(() => {
       >
         <ZIcon name="delete" :size="15" class="shrink-0 text-sandal" />
         {{ COPY.removeDoc }}
+      </button>
+    </ContextMenu>
+
+    <ContextMenu
+      :open="folderMenu.open"
+      :x="folderMenu.x"
+      :y="folderMenu.y"
+      @close="closeFolderMenu"
+    >
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        @click="onRemoveFolder"
+      >
+        <ZIcon name="delete" :size="15" class="shrink-0 text-sandal" />
+        {{ COPY.removeFolder }}
       </button>
     </ContextMenu>
 

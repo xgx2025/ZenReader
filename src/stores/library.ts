@@ -2,13 +2,8 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { nativeFs } from '@/lib/native'
-import {
-  folderPathFromRelative,
-  resolveTitle,
-  vaultFile,
-  readNotesIndex,
-  writeNotesIndex,
-} from '@/lib/vault'
+import { deleteDocumentNotes, moveDocumentNotes } from '@/lib/notesApi'
+import { folderPathFromRelative, resolveTitle, vaultFile } from '@/lib/vault'
 import { renderMarkdown } from '@/lib/markdown/parser'
 import { parseFrontmatter } from '@/lib/markdown/frontmatter'
 import { countWords, computeReadingTime, makeExcerpt } from '@/lib/markdown/structure'
@@ -194,19 +189,29 @@ export const useLibraryStore = defineStore('library', () => {
     await refresh()
   }
 
-  /** Move a document's file on disk, migrating its notes to the new key. */
+  /**
+   * Delete an empty 分组 (only empty folders can be 释怀). Refuses folders
+   * that still hold any files — the error surfaces as a toast in the view.
+   */
+  async function removeFolder(relativePath: string) {
+    await nativeFs.removeFolder(settings.vaultPath, relativePath)
+    // 选中的分组若正是被删的分组（或其下），退回根分组。
+    if (
+      selectedFolder.value === relativePath ||
+      selectedFolder.value.startsWith(`${relativePath}/`)
+    ) {
+      selectedFolder.value = ''
+    }
+    await refresh()
+  }
+
+  /** Move a document's file on disk, migrating its notes to the new path. */
   async function moveDocument(from: string, to: string) {
     await nativeFs.moveFile(
       vaultFile(settings.vaultPath, from),
       vaultFile(settings.vaultPath, to),
     )
-    const notes = await readNotesIndex(settings.vaultPath)
-    if (notes[from]) {
-      const moved = notes[from].map((n) => ({ ...n, relativePath: to }))
-      notes[to] = [...(notes[to] ?? []), ...moved]
-      delete notes[from]
-      await writeNotesIndex(settings.vaultPath, notes)
-    }
+    await moveDocumentNotes(settings.vaultPath, from, to)
     useProgressStore().move(from, to) // reading position follows the file
     await refresh()
   }
@@ -214,11 +219,7 @@ export const useLibraryStore = defineStore('library', () => {
   /** Delete a document's file on disk, dropping its notes + progress. */
   async function removeDocument(relativePath: string) {
     await nativeFs.deleteFile(vaultFile(settings.vaultPath, relativePath))
-    const notes = await readNotesIndex(settings.vaultPath)
-    if (notes[relativePath]) {
-      delete notes[relativePath]
-      await writeNotesIndex(settings.vaultPath, notes)
-    }
+    await deleteDocumentNotes(settings.vaultPath, relativePath)
     useProgressStore().drop(relativePath)
     await refresh()
   }
@@ -266,6 +267,7 @@ export const useLibraryStore = defineStore('library', () => {
     refresh,
     openVault,
     createFolder,
+    removeFolder,
     moveDocument,
     removeDocument,
   }
