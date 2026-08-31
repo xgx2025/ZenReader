@@ -8,8 +8,9 @@ export function sanitizeHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ADD_TAGS: ['input'],
-    // Keep heading ids (`id`), highlight classes (`class`), and task-list
-    // checkbox state (`checked`/`disabled`/`type`).
-    ADD_ATTR: ['id', 'class', 'checked', 'disabled', 'type'],
+    // Keep heading ids (`id`), highlight classes (`class`), task-list
+    // checkbox state (`checked`/`disabled`/`type`), and external-link
+    // semantics (`target`/`rel` — stripped by default, we render them).
+    ADD_ATTR: ['id', 'class', 'checked', 'disabled', 'type', 'target', 'rel'],
   })
 }

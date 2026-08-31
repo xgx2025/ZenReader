@@ -66,13 +66,13 @@ const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
 
 <template>
   <div
-    class="card-rise group relative flex"
+    class="card-rise group relative flex min-w-0"
     :style="{ animationDelay: riseDelay }"
     @contextmenu.prevent="emit('menu', file, $event.clientX, $event.clientY)"
   >
     <RouterLink
       :to="`/read/${encodeURIComponent(file.relativePath)}`"
-      class="flex flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
+      class="flex min-w-0 flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
     >
       <div class="flex items-start justify-between gap-2">
         <h3 class="min-h-[2lh] font-serif font-bold text-lg leading-snug text-ink line-clamp-2">
@@ -90,7 +90,7 @@ const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
       <!-- 全文命中片段优先于摘要，说明命中缘由 -->
       <p
         v-if="hit"
-        class="mt-2 text-xs leading-relaxed text-dusk"
+        class="mt-2 break-words text-xs leading-relaxed text-dusk"
       >
         {{ hit.lead }}{{ hit.before }}<mark class="rounded-sm bg-bamboo/20 px-0.5 text-ink">{{ hit.match }}</mark>{{ hit.after }}{{ hit.tail }}
       </p>

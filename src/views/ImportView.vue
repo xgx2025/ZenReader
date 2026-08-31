@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useDropZone } from '@vueuse/core'
 
 import ZIcon from '@/components/common/ZIcon.vue'
 
 import { useFileImport } from '@/composables/useFileImport'
+import { useNativeDragDrop } from '@/composables/useNativeDragDrop'
 import { useLibraryStore } from '@/stores/library'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
 import type { ImportResult } from '@/types/import'
 
-const { items, importing, importFiles } = useFileImport()
+const { items, importing, importFiles, importPaths } = useFileImport()
 const library = useLibraryStore()
 const { notify } = useToast()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
 const result = ref<ImportResult | null>(null)
+const resultEl = ref<HTMLElement | null>(null)
 /** Destination 分组 within the vault; empty string = root. */
 const targetFolder = ref('')
 
@@ -27,13 +29,39 @@ const { isOverDropZone } = useDropZone(dropzoneEl, {
   },
 })
 
+// 桌面端：Tauri 拦截了 HTML5 drop，须走原生通道收绝对路径。
+const { dragging: nativeDragging } = useNativeDragDrop((paths) => {
+  if (!library.hasVault) {
+    notify(COPY.vaultNotOpen, 'sandal')
+    return
+  }
+  start(() => importPaths(paths, targetFolder.value))
+})
+
 function run(files: File[]) {
+  start(() => importFiles(files, targetFolder.value))
+}
+
+/**
+ * 藏卷毕：结果卡入视野，并轻唤一声去向，不让用户猜。
+ * 收工厂函数而非 promise--导入函数的同步前缀会先置 importing，
+ * 传 promise 会让守卫误判「正在导入」而整段跳过。
+ */
+async function start(run: () => Promise<ImportResult>) {
+  if (importing.value) return
   result.value = null
-  importFiles(files, targetFolder.value).then((r) => {
-    result.value = r
-    // 略过不为零时说一声缘由，不让用户猜。
-    if (r.skipped > 0) notify(COPY.importDuplicateHint, 'dusk')
-  })
+  const r = await run()
+  result.value = r
+
+  await nextTick()
+  resultEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+
+  const parts: string[] = []
+  if (r.imported) parts.push(`${COPY.importDone} ${r.imported}`)
+  if (r.skipped) parts.push(`${COPY.importSkipped} ${r.skipped}`)
+  if (r.errors.length) parts.push(`${COPY.importError} ${r.errors.length}`)
+  if (!parts.length) return
+  notify(parts.join(' · '), r.imported && !r.errors.length ? 'bamboo' : 'sandal')
 }
 
 function onFileChange(e: Event) {
@@ -131,27 +159,31 @@ const STATUS_CLASS: Record<string, string> = {
           ref="dropzoneEl"
           class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-16 text-center transition-colors duration-300"
           :class="
-            isOverDropZone
+            isOverDropZone || nativeDragging
               ? 'border-bamboo bg-bamboo/10'
               : 'border-line/70 bg-paper-deep/40 hover:border-bamboo/50'
           "
-          @click="fileInput?.click()"
+          @click="!importing && fileInput?.click()"
         >
           <ZIcon name="import" :size="28" :stroke-width="1" class="text-sandal" />
-          <p class="mt-4 text-sm text-ink-soft">{{ COPY.importDropHint }}</p>
-          <p class="mt-1 text-xs text-dusk">.md / .markdown</p>
+          <p class="mt-4 text-sm text-ink-soft">
+            {{ importing ? COPY.importReading : COPY.importDropHint }}
+          </p>
+          <p v-if="!importing" class="mt-1 text-xs text-dusk">.md</p>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-3">
           <button
-            class="flex flex-1 items-center justify-center gap-2 rounded-full bg-paper-deep/60 px-4 py-2.5 text-sm text-ink shadow-zen-sm transition-colors hover:bg-paper-deep"
+            class="flex flex-1 items-center justify-center gap-2 rounded-full bg-paper-deep/60 px-4 py-2.5 text-sm text-ink shadow-zen-sm transition-colors hover:bg-paper-deep disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="importing"
             @click="fileInput?.click()"
           >
             <ZIcon name="import" :size="16" />
             {{ COPY.importFileAction }}
           </button>
           <button
-            class="flex flex-1 items-center justify-center gap-2 rounded-full bg-paper-deep/60 px-4 py-2.5 text-sm text-ink shadow-zen-sm transition-colors hover:bg-paper-deep"
+            class="flex flex-1 items-center justify-center gap-2 rounded-full bg-paper-deep/60 px-4 py-2.5 text-sm text-ink shadow-zen-sm transition-colors hover:bg-paper-deep disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="importing"
             @click="folderInput?.click()"
           >
             <ZIcon name="folder" :size="16" />
@@ -162,7 +194,7 @@ const STATUS_CLASS: Record<string, string> = {
         <input
           ref="fileInput"
           type="file"
-          accept=".md,.markdown,text/markdown"
+          accept=".md,text/markdown"
           multiple
           class="hidden"
           @change="onFileChange"
@@ -196,11 +228,14 @@ const STATUS_CLASS: Record<string, string> = {
 
         <div
           v-if="result"
+          ref="resultEl"
           class="mt-6 rounded-xl bg-paper-deep/40 p-5 text-center shadow-zen-sm"
         >
           <p class="font-serif text-lg text-ink">
             {{ COPY.importDone }} {{ result.imported }} · {{ COPY.importSkipped }}
-            {{ result.skipped }}
+            {{ result.skipped }}<template v-if="result.errors.length">
+              · {{ COPY.importError }} {{ result.errors.length }}</template
+            >
           </p>
 
           <div class="mt-4 flex flex-wrap justify-center gap-3">

@@ -1,9 +1,25 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 
 import type { VaultFile, VaultListing } from '@/types/document'
 
 export type { VaultFile, VaultListing }
 export { isTauri }
+
+/**
+ * 用系统默认浏览器打开外部链接；非 Tauri 环境（浏览器 dev）返回 false，
+ * 交给浏览器自身的默认行为（新标签）。
+ */
+export async function openExternal(url: string): Promise<boolean> {
+  if (!isTauri()) return false
+  try {
+    await openUrl(url)
+    return true
+  } catch (e) {
+    console.error('[zenreader] open external url failed:', url, e)
+    return false
+  }
+}
 
 /** Thin wrappers over the Tauri Rust filesystem commands. */
 export const nativeFs = {

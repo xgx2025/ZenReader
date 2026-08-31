@@ -1,11 +1,10 @@
-import { onBeforeUnmount, ref } from 'vue'
+import { ref } from 'vue'
 import { useDropZone } from '@vueuse/core'
-import { getCurrentWebview } from '@tauri-apps/api/webview'
 
-import { isTauri, nativeFs } from '@/lib/native'
-import { joinPath, vaultFile } from '@/lib/vault'
+import { isTauri } from '@/lib/native'
 import { COPY } from '@/lib/copy'
 import { useFileImport } from '@/composables/useFileImport'
+import { useNativeDragDrop } from '@/composables/useNativeDragDrop'
 import { useSettingsStore } from '@/stores/settings'
 import { useLibraryStore } from '@/stores/library'
 import { useToast } from '@/composables/useToast'
@@ -29,62 +28,10 @@ export function useVaultDrop(
   const settings = useSettingsStore()
   const library = useLibraryStore()
   const { notify } = useToast()
-  const { importFiles } = useFileImport()
+  const { importFiles, importPaths } = useFileImport()
 
   const dragging = ref(false)
   const importing = ref(false)
-
-  let unlisten: (() => void) | null = null
-  let disposed = false
-
-  /** 桌面端：按绝对路径导入（单文件或整个文件夹），保留文件夹内部结构。 */
-  async function importPaths(paths: string[]): Promise<DropImportResult> {
-    const targetFolder = getTargetFolder()
-    const existing = new Set(library.files.map((f) => f.relativePath))
-    let imported = 0
-    let skipped = 0
-    let failed = 0
-
-    for (const p of paths) {
-      try {
-        if (/\.md$/i.test(p)) {
-          const name = p.split(/[\\/]/).pop() ?? p
-          const rel = joinPath(targetFolder, name)
-          if (existing.has(rel)) {
-            skipped++
-            continue
-          }
-          const content = await nativeFs.readFile(p)
-          await nativeFs.writeFile(vaultFile(settings.vaultPath, rel), content)
-          existing.add(rel)
-          imported++
-        } else {
-          // 非单文件落点视作文件夹：递归扫出其中全部 .md。
-          const listing = await nativeFs.readVault(p.replace(/[\\/]+$/, ''))
-          if (listing.files.length === 0) {
-            skipped++
-            continue
-          }
-          for (const f of listing.files) {
-            const rel = joinPath(targetFolder, f.relativePath)
-            if (existing.has(rel)) {
-              skipped++
-              continue
-            }
-            const content = await nativeFs.readFile(f.path)
-            await nativeFs.writeFile(vaultFile(settings.vaultPath, rel), content)
-            existing.add(rel)
-            imported++
-          }
-        }
-      } catch {
-        failed++
-      }
-    }
-
-    if (imported > 0) await library.refresh()
-    return { imported, skipped, failed }
-  }
 
   function beginDrop(run: () => Promise<DropImportResult>) {
     if (!settings.vaultPath) {
@@ -100,50 +47,37 @@ export function useVaultDrop(
       })
   }
 
-  if (isTauri()) {
-    getCurrentWebview()
-      .onDragDropEvent((event) => {
-        const t = event.payload
-        if (t.type === 'enter' || t.type === 'over') {
-          dragging.value = true
-        } else if (t.type === 'leave') {
-          dragging.value = false
-        } else if (t.type === 'drop') {
-          dragging.value = false
-          if (!t.paths.length) return
-          beginDrop(() => importPaths(t.paths))
-        }
-      })
-      .then((fn) => {
-        if (disposed) fn()
-        else unlisten = fn
-      })
-  } else {
-    useDropZone(document.body, {
-      onEnter: () => {
-        dragging.value = true
-      },
-      onLeave: () => {
-        dragging.value = false
-      },
-      onDrop: (files) => {
-        dragging.value = false
-        if (!files?.length) return
-        beginDrop(async () => {
-          const r = await importFiles(files, getTargetFolder())
-          return {
-            imported: r.imported,
-            skipped: r.skipped,
-            failed: r.errors.length,
-          }
-        })
-      },
-    })
+  /** Wrap an ImportResult into the summary shape this page's toast consumes. */
+  function summarize(r: {
+    imported: number
+    skipped: number
+    errors: unknown[]
+  }): DropImportResult {
+    return { imported: r.imported, skipped: r.skipped, failed: r.errors.length }
   }
 
-  onBeforeUnmount(() => {
-    disposed = true
-    unlisten?.()
+  if (isTauri()) {
+    const { dragging: nativeDragging } = useNativeDragDrop((paths) => {
+      beginDrop(() => importPaths(paths, getTargetFolder()).then(summarize))
+    })
+    // 原生通道持有 dragging 状态，此处转引以保持既有返回值。
+    return { dragging: nativeDragging, importing }
+  }
+
+  useDropZone(document.body, {
+    onEnter: () => {
+      dragging.value = true
+    },
+    onLeave: () => {
+      dragging.value = false
+    },
+    onDrop: (files) => {
+      dragging.value = false
+      if (!files?.length) return
+      beginDrop(async () =>
+        summarize(await importFiles(files, getTargetFolder())),
+      )
+    },
   })
 
   return { dragging, importing }

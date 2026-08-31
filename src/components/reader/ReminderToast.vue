@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
+import RestGuide from '@/components/reader/RestGuide.vue'
 import ZIcon, { type IconName } from '@/components/common/ZIcon.vue'
 import { useZenClock } from '@/composables/useZenClock'
 import { useSettingsStore } from '@/stores/settings'
@@ -32,6 +33,13 @@ function onRelight() {
   dismiss()
   ignite()
 }
+
+/** 跟着动作词歇：收起提醒，进入引导层陪你把这一歇歇完。 */
+const guideOpen = ref(false)
+function onRest() {
+  dismiss()
+  guideOpen.value = true
+}
 </script>
 
 <template>
@@ -47,18 +55,25 @@ function onRelight() {
         "
         @click="dismiss"
       >
-        <ZIcon :name="icon" :size="16" class="zen-breathe shrink-0 text-sandal" />
-        <div class="flex flex-col items-start leading-tight">
-          <span v-if="!settings.zenMode" class="text-xs text-dusk">
-            {{ COPY.incenseGone }}
-          </span>
-          <span
-            class="font-serif text-ink"
-            :class="reminderLevel === 2 ? 'text-base' : 'text-sm'"
-          >
-            {{ text }}
-          </span>
-        </div>
+        <button
+          type="button"
+          class="flex shrink-0 items-center gap-2.5 rounded-full text-left transition-colors hover:text-bamboo"
+          title="跟着歇一歇"
+          @click.stop="onRest"
+        >
+          <ZIcon :name="icon" :size="16" class="zen-breathe shrink-0 text-sandal" />
+          <div class="flex flex-col items-start leading-tight">
+            <span v-if="!settings.zenMode" class="text-xs text-dusk">
+              {{ COPY.incenseGone }}
+            </span>
+            <span
+              class="font-serif text-ink"
+              :class="reminderLevel === 2 ? 'text-base' : 'text-sm'"
+            >
+              {{ text }}
+            </span>
+          </div>
+        </button>
         <button
           type="button"
           class="ml-1 shrink-0 rounded-full px-2.5 py-1 text-xs text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
@@ -75,5 +90,7 @@ function onRelight() {
         </button>
       </div>
     </Transition>
+
+    <RestGuide :open="guideOpen" :action="reminderAction" @close="guideOpen = false" />
   </Teleport>
 </template>

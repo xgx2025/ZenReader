@@ -17,13 +17,24 @@ let persistFlushWired = false
 /**
  * 浅合并之上，对 reminder 再深合并一层：旧版本持久化里存量的 reminder 对象
  * 会整体覆盖默认值，新增字段（如 chime）若无深合并将悄悄丢失。
+ * 另做一条迁移：旧版布尔开关 zenRitual（关=快速短雾）由 zenEntry 枚举取代
+ * ——曾关掉仪式的老用户落「轻雾」，其余落默认「墨韵」，并剥掉旧键。
  */
 function mergeSettings(parsed: Partial<ReaderSettings>): ReaderSettings {
-  return {
+  const merged: ReaderSettings = {
     ...DEFAULT_SETTINGS,
     ...parsed,
     reminder: { ...DEFAULT_SETTINGS.reminder, ...(parsed.reminder ?? {}) },
   }
+  if (parsed.zenEntry === undefined) {
+    merged.zenEntry =
+      (parsed as Partial<ReaderSettings> & { zenRitual?: unknown }).zenRitual ===
+      false
+        ? 'mist'
+        : DEFAULT_SETTINGS.zenEntry
+  }
+  delete (merged as Partial<ReaderSettings> & { zenRitual?: unknown }).zenRitual
+  return merged
 }
 
 /**
@@ -60,6 +71,8 @@ export const useSettingsStore = defineStore('settings', {
         const raw = await nativeFs.readSettings()
         if (raw != null) {
           this.$patch(mergeSettings(JSON.parse(raw) as Partial<ReaderSettings>))
+          // 镜像到 localStorage：index.html 的首帧防闪烁脚本只读得到这里。
+          this.mirrorLocal()
         } else {
           const legacy = localStorage.getItem(STORAGE_KEY)
           if (legacy) {
@@ -93,12 +106,25 @@ export const useSettingsStore = defineStore('settings', {
     /** Persist to the settings file (Tauri) or localStorage (browser). */
     persist() {
       const json = JSON.stringify(this.$state)
+      this.mirrorLocal()
       if (isTauri()) {
         return nativeFs.writeSettings(json).catch((e) => {
           console.error('[zenreader] write settings failed', e)
         })
       }
-      localStorage.setItem(STORAGE_KEY, json)
+    },
+
+    /**
+     * 把当前设置镜像进 localStorage。Tauri 下 settings.json 才是真源，
+     * 但 index.html 的首帧防闪烁内联脚本读不到文件、只读得到 localStorage
+     * ——不镜像的话，改过主题的机器首帧会闪回遗留的旧主题。
+     */
+    mirrorLocal() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.$state))
+      } catch {
+        /* 隐私模式等存不进去就算了，不影响主存储 */
+      }
     },
 
     /** Debounced persist：高频更新（滑杆拖动）只落最后一次。 */

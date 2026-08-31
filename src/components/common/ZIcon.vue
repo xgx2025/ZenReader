@@ -31,6 +31,8 @@ export type IconName =
   | 'figure'
   | 'keyboard'
   | 'chevron-down'
+  | 'about'
+  | 'library'
 
 const props = withDefaults(
   defineProps<{ name: IconName; size?: number; strokeWidth?: number }>(),
@@ -78,16 +80,27 @@ const ICONS: Record<IconName, string> = {
   keyboard:
     '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01"/><path d="M10 9h.01"/><path d="M14 9h.01"/><path d="M18 9h.01"/><path d="M6 13h.01"/><path d="M10 13h.01"/><path d="M14 13h.01"/><path d="M18 13h.01"/><path d="M8 16h8"/>',
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  about: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 11v5"/>',
+  // 实底书架（书库根行专用）：1024 视箱的填充图形，逐 path 覆盖
+  // svg 级的 fill=none/stroke 默认，视箱见 ICON_VIEWBOX。
+  library:
+    '<path fill="currentColor" stroke="none" d="M321.21 73.7h-181a18.53 18.53 0 0 0-18.52 18.53v859.66a18.53 18.53 0 0 0 18.52 18.53h181a18.53 18.53 0 0 0 18.53-18.53V92.23a18.53 18.53 0 0 0-18.53-18.53z m-90.5 734a46.5 46.5 0 1 1 46.49-46.5 46.5 46.5 0 0 1-46.49 46.54z m69.4-487.7H161.3v-23.35h138.81z m0-104.63H161.3V192h138.81z m288.5-142.69h-181a18.53 18.53 0 0 0-18.53 18.53v859.66a18.53 18.53 0 0 0 18.53 18.53h181a18.53 18.53 0 0 0 18.53-18.53V91.21a18.53 18.53 0 0 0-18.53-18.53z m-90.5 734a46.5 46.5 0 1 1 46.5-46.5 46.5 46.5 0 0 1-46.5 46.54zM567.52 319H428.7v-23.38h138.82z m0-104.62H428.7V191h138.82z"/><path fill="currentColor" stroke="none" d="M796.15 53.91L618.32 87.64a18.51 18.51 0 0 0-14.75 21.65L763.75 953.9a18.53 18.53 0 0 0 21.65 14.75l177.84-33.73A18.52 18.52 0 0 0 978 913.27L817.81 68.66a18.53 18.53 0 0 0-21.66-14.75zM844 792a46.49 46.49 0 1 1 37-54.34A46.5 46.5 0 0 1 844 792z m-22.68-492.19l-136.39 25.87-4.35-22.93L817 276.88zM801.82 197l-136.38 25.89-4.35-22.89 136.38-25.87z"/>',
+}
+
+/** 个别图形用非 24 视箱（如实底书架来自 1024 图集）。 */
+const ICON_VIEWBOX: Partial<Record<IconName, string>> = {
+  library: '0 0 1024 1024',
 }
 
 const path = computed(() => ICONS[props.name] ?? '')
+const viewBox = computed(() => ICON_VIEWBOX[props.name] ?? '0 0 24 24')
 </script>
 
 <template>
   <svg
     :width="size"
     :height="size"
-    viewBox="0 0 24 24"
+    :viewBox="viewBox"
     fill="none"
     stroke="currentColor"
     :stroke-width="strokeWidth"

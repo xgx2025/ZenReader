@@ -5,6 +5,10 @@ import App from './App.vue'
 import router from './router'
 import { useSettingsStore } from './stores/settings'
 
+// Bundled Noto Serif SC (variable, unicode-range chunks) — reading never
+// depends on fonts the user happens to have installed.
+import '@fontsource-variable/noto-serif-sc'
+
 import './assets/styles/main.css'
 import './assets/styles/typography.css'
 import './assets/styles/motion.css'

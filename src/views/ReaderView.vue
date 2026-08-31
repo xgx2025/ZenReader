@@ -13,7 +13,7 @@ import ZIcon from '@/components/common/ZIcon.vue'
 import type { IconName } from '@/components/common/ZIcon.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SelectionToolbar from '@/components/reader/SelectionToolbar.vue'
-import ReminderToast from '@/components/reader/ReminderToast.vue'
+import ImageViewer from '@/components/reader/ImageViewer.vue'
 import IncenseControl from '@/components/reader/IncenseControl.vue'
 import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
@@ -21,11 +21,12 @@ import ShortcutSheet from '@/components/reader/ShortcutSheet.vue'
 
 import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
+import { renderMermaidBlocks } from '@/lib/markdown/mermaid'
+import { wireCodeCopy } from '@/lib/markdown/codeCopy'
 import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
 import { useReadingScroll } from '@/composables/useReadingScroll'
 import { useFullscreen } from '@/composables/useFullscreen'
-import { useZenClock } from '@/composables/useZenClock'
 import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
 import { useSettingsStore } from '@/stores/settings'
@@ -33,9 +34,15 @@ import { useProgressStore } from '@/stores/progress'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
+import { isTauri, openExternal } from '@/lib/native'
+import { resolveDocLink } from '@/lib/vault'
 import { playZenEnterChime } from '@/lib/chime'
 import ZenMotes from '@/components/reader/ZenMotes.vue'
-import ZenRitual from '@/components/reader/ZenRitual.vue'
+import {
+  ZEN_RITUAL_COMPONENTS,
+  resolveZenEntry,
+  type ZenRitualKey,
+} from '@/components/reader/zenRituals'
 import type { HighlightAnchor, Note } from '@/types/note'
 import type { ThemeName } from '@/types/settings'
 import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
@@ -48,7 +55,6 @@ const settings = useSettingsStore()
 const progressStore = useProgressStore()
 const { openPanel } = useSettingsPanel()
 const { isFullscreen, toggle: toggleFullscreen, setZen } = useFullscreen()
-const { start, stop, awayNotice, clearAwayNotice } = useZenClock()
 
 const proseEl = ref<HTMLElement | null>(null)
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
@@ -81,6 +87,15 @@ const structure = computed(() =>
 const toc = computed(() => structure.value.toc)
 const headingIds = computed(() => toc.value.map((t) => t.id))
 
+// 窗口标题随书名走：任务栏 / Alt+Tab 一眼可见正在读哪卷。
+watch(
+  doc,
+  (d) => {
+    document.title = d ? `${d.title} · ${COPY.appName}` : COPY.appTitle
+  },
+  { immediate: true },
+)
+
 function onScrollProgress(ratio: number) {
   const d = reader.current
   if (!d || restoring.value) return
@@ -99,10 +114,24 @@ const {
   containerRef,
   activeHeadingId,
   toolbarHidden,
+  scrollTopPx,
   scrollByFraction,
   scrollToHeading: scrollToHeadingEl,
   restoreRatio,
 } = useReadingScroll(headingIds, onScrollProgress)
+
+/** 行至半卷（约 1.5 屏）后方浮现的回到卷首。 */
+const showBackTop = computed(() => scrollTopPx.value > window.innerHeight * 1.5)
+
+/** 图片灯箱：正文 img 点击后的放大查看。 */
+const viewerSrc = ref<string | null>(null)
+
+/** 平滑滚到卷首 / 卷尾（Home / End / 回到卷首共用）。 */
+function scrollToEdge(edge: 'top' | 'bottom') {
+  const el = containerRef.value
+  if (!el) return
+  el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight, behavior: 'smooth' })
+}
 const anchors = computed<AppliedAnchor[]>(() =>
   notesStore.notes
     .filter((n): n is Note & { anchor: HighlightAnchor } => n.anchor !== null)
@@ -134,22 +163,18 @@ function onIncenseIgnited() {
   }, 2200)
 }
 
-// 离席自动熄香提示：回来时轻声解释香为何灭了。
-watch(awayNotice, (v) => {
-  if (!v) return
-  window.setTimeout(() => clearAwayNotice(), 2600)
-})
-
 /**
- * 入定仪式的编排全部在 ZenRitual.vue（「一滴墨 · 一笔圆相」）内自导
- * 自演：组件按时间线推进，经 stage 事件通知此处让世界逐层退去
- * （1 顶栏化去 → 2 面板隐去边距舒展 → 3 稳态澄明，各 UI 层的显隐
- * 由 ritualStage 门控）。轻触任意处可跳过，关掉「入定仪式」则以
- * 一口短雾快速过场。
+ * 入定动画的编排全部在仪式组件（ZenRitualInk / ZenRitualLeaf /
+ * ZenRitualIncense，注册表见 zenRituals.ts）内自导自演：组件按时间线
+ * 推进，经 stage 事件通知此处让世界逐层退去（1 顶栏化去 → 2 面板隐
+ * 去边距舒展 → 3 稳态澄明，各 UI 层的显隐由 ritualStage 门控）。轻触
+ * 任意处可跳过；「轻雾」档（或系统减动效）则以一口短雾快速过场。
  */
 /** 仪式阶段 0→3：0 世界完整；1 顶栏已化去；2 面板已隐、边距舒展；3 稳态澄明。 */
 const ritualStage = ref(0)
 const ritualActive = ref(false)
+/** 本次入定所选中的仪式（随机档在入定一刻现抽）。 */
+const activeRitual = ref<ZenRitualKey>('ink')
 /** 出定／速入共用的一口短促纸色雾（zen-out-puff）。 */
 const zenPuff = ref(false)
 let puffTimer: ReturnType<typeof setTimeout> | null = null
@@ -196,7 +221,9 @@ watch(
   (zen) => {
     if (zen) {
       if (settings.reminder.chime) playZenEnterChime()
-      if (settings.zenRitual && !prefersReducedMotion()) {
+      const style = resolveZenEntry(settings.zenEntry)
+      if (style !== 'mist' && !prefersReducedMotion()) {
+        activeRitual.value = style
         ritualActive.value = true
       } else {
         ritualStage.value = 3
@@ -227,7 +254,10 @@ function renderProse() {
   if (!el || !doc.value) return
   el.innerHTML = doc.value.html
   applyAnchors(el, anchors.value)
+  // mermaid 先行把 `language-mermaid` 块替换为图卡，shiki 便不会再碰它们。
+  renderMermaidBlocks(el, settings.theme)
   highlightCodeBlocks(el, settings.theme)
+  wireCodeCopy(el)
 }
 
 /** 局部更新：只为此条笔记包一层 <mark>，不整篇重建、不重跑代码高亮。 */
@@ -410,14 +440,45 @@ async function onConfirmDelete() {
   }
 }
 
+const EXTERNAL_HREF = /^(?:https?:\/\/|mailto:)/i
+
 function onProseClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   const mark = target.closest('mark.hl')
-  if (!mark) return
-  const id = mark.getAttribute('data-note-id')
-  if (!id) return
-  activeNoteId.value = id
-  showNotes.value = true
+  if (mark) {
+    const id = mark.getAttribute('data-note-id')
+    if (id) {
+      activeNoteId.value = id
+      showNotes.value = true
+    }
+    return
+  }
+  const anchor = target.closest('a[href]')
+  if (!anchor) {
+    // 无链之图：入灯箱静观（带链的图交给链接逻辑）。
+    const img = target.closest('img')
+    if (img) viewerSrc.value = img.getAttribute('src')
+    return
+  }
+  const href = anchor.getAttribute('href') ?? ''
+  if (!href || href.startsWith('#')) return // 页内锚点（含脚注）走默认行为
+  if (EXTERNAL_HREF.test(href)) {
+    // 系统浏览器接管外链，WebView 原地不动；浏览器 dev 走默认新标签。
+    if (isTauri()) {
+      e.preventDefault()
+      void openExternal(href)
+    }
+    return
+  }
+  // 其余一律不导航，防止 WebView 跑出去回不来。
+  e.preventDefault()
+  const resolved = route.params.path
+    ? resolveDocLink(route.params.path as string, href)
+    : null
+  if (resolved) {
+    // 互链走应用内路由；目标缺失时由 loadDocument 的失败流提示并回书库。
+    void router.push(`/read/${encodeURIComponent(resolved)}`)
+  }
 }
 
 function jumpToHighlight(id: string) {
@@ -527,6 +588,12 @@ function onKeydown(e: KeyboardEvent) {
     case 'ArrowLeft':
       jumpChapter(-1)
       return
+    case 'Home':
+      scrollToEdge('top')
+      return
+    case 'End':
+      scrollToEdge('bottom')
+      return
     case 't':
     case 'T':
       showToc.value = !showToc.value
@@ -549,6 +616,8 @@ watch(
   () => settings.theme,
   () => {
     if (proseEl.value && doc.value) {
+      // mermaid 图卡内藏源码（data-mermaid-src），主题切换整图重绘。
+      renderMermaidBlocks(proseEl.value, settings.theme)
       highlightCodeBlocks(proseEl.value, settings.theme)
     }
   },
@@ -556,7 +625,6 @@ watch(
 
 onMounted(() => {
   loadDocument()
-  start()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
@@ -564,8 +632,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  document.title = COPY.appTitle
   if (puffTimer) clearTimeout(puffTimer)
-  stop()
   progressStore.flush()
 })
 
@@ -815,17 +883,6 @@ watch(() => route.params.path, loadDocument)
       <IncenseControl variant="zen" @ignite="onIncenseIgnited" />
     </div>
 
-    <!-- 离席熄香 hint -->
-    <Transition name="fade">
-      <p
-        v-if="awayNotice"
-        class="pointer-events-none fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-paper/90 px-3.5 py-1.5 text-xs text-ink-soft shadow-zen-sm backdrop-blur-sm"
-      >
-        <ZIcon name="incense" :size="13" class="text-dusk" />
-        {{ COPY.awayNotice }}
-      </p>
-    </Transition>
-
     <!-- 续读 hint -->
     <Transition name="fade">
       <p
@@ -878,14 +935,26 @@ watch(() => route.params.path, loadDocument)
       @close="showShortcuts = false"
     />
 
-    <ReminderToast />
-
-    <!-- 入定仪式「一滴墨 · 一笔圆相」：纱起、墨滴落纸、一笔圆相绕心
-         而书，每次呼气墨晕漫过全屏、世界退去一层，末息圆相收作墨点
-         沉底、水洗漫开纱散。轻触任意处可跳过（编排见 ZenRitual.vue，
-         时序见 motion.css「一滴墨 · 一笔圆相」一节）。 -->
+    <!-- 回到卷首：行至半卷方才浮现，回顶即隐；禅境不设，免扰清净。 -->
     <Transition name="fade">
-      <ZenRitual
+      <button
+        v-if="showBackTop && !settings.zenMode"
+        class="fixed bottom-6 right-6 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-paper/90 font-serif text-sm text-ink-soft shadow-zen-sm backdrop-blur-sm transition-colors hover:text-ink"
+        :title="COPY.backToTop"
+        @click="scrollToEdge('top')"
+      >
+        顶
+      </button>
+    </Transition>
+
+    <ImageViewer :src="viewerSrc" @close="viewerSrc = null" />
+
+    <!-- 入定仪式（风格由设置「入定动画」决定，注册表见 zenRituals.ts）：
+         墨韵/落叶/香篆各自按契约推进——纱起、各自意象展开，世界退去
+         一层→两层→稳态，末景水洗漫开纱散。轻触任意处可跳过。 -->
+    <Transition name="fade">
+      <component
+        :is="ZEN_RITUAL_COMPONENTS[activeRitual]"
         v-if="ritualActive"
         @stage="onRitualStage"
         @skip="skipRitual"

@@ -1,18 +1,23 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
 
+import { isTauri } from '@/lib/native'
 import { useSettingsStore } from '@/stores/settings'
 import { COPY } from '@/lib/copy'
 import { playIncenseChime, prepareChime } from '@/lib/chime'
+import { hideToTray, setupTray, syncTray } from '@/lib/trayClock'
 import type { ReminderAction } from '@/types/settings'
 
 /**
- * 禅钟 — 连续专注歇息提醒（会话级单例，仿 useFullscreen）。
+ * 禅钟 — 全局专注钟（方向 B，会话级单例，仿 useFullscreen）。
  *
- * 「一炷香」模型：进入阅读页后，由用户亲手「点香」开始计时（而非静默自动开始），
- * 香尽则轻声提醒歇息。小巧思在于「心流觉察」——计时只累计真正连续专注的时间：
- *   - 窗口失焦超过 2 分钟 → 判定你已离席去休息，香熄灭、需重新点燃；
- *   - 窗口仍在前台但 10 分钟零操作 → 同理熄灭。
- * 于是提醒永远不会在你「刚休息回来」时打扰你。香是会话级的，离开阅读页即熄。
+ * 「一炷香」模型：由用户亲手「点香」开始计时（阅读页工具栏 / 托盘皆可），
+ * 香尽则轻声提醒歇息——一枚纯粹的定时器，不判定离席、不失焦暂停。
+ * 香是全局的：切去书库、别的窗口、乃至把主窗缩进托盘，香都照烧，到点必响；
+ * 人不在应用里时以系统通知接住。真正退出应用（托盘「退出」）香才灭。
+ *
+ * 计时循环由 App.vue 挂载时启动，不随任何页面卸载。
+ * 燃香进度同时镜像到 Windows 任务栏与托盘悬停提示。
  */
 
 const TICK_MS = 1000
@@ -22,32 +27,14 @@ const PRE_HINT_MS = 5 * 60_000
 const ESCALATE_MS = 30_000
 /** 提醒停留多久后自动退场（防久悬不散）。 */
 const AUTO_DISMISS_MS = 3 * 60_000
-/** 窗口失焦超过此时长 → 视为离席，香熄灭。 */
-const HIDDEN_RESET_MS = 2 * 60_000
-/** 前台但零操作超过此时长 → 视为离席，香熄灭。 */
-const IDLE_RESET_MS = 10 * 60_000
 
-const ACTIVITY_EVENTS: string[] = [
-  'mousemove',
-  'mousedown',
-  'keydown',
-  'wheel',
-  'touchstart',
-  'scroll',
-]
-
-// 会话级单例状态（不持久化）。
+// 会话级单例状态（不持久化；应用退出即熄）。
 const lit = ref(false) // 香是否点燃（用户手动）
 const elapsedMs = ref(0)
 const reminderOpen = ref(false)
 const reminderLevel = ref<1 | 2>(1)
 const reminderAction = ref<ReminderAction>('stretch')
-/** 离席自动熄香后待展示的提示（窗口重新可见时由视图消费）。 */
-const awayHintPending = ref(false)
 
-// 仅被 tick 命令式读取，无需响应式；用普通变量避免 mousemove 触发无谓更新。
-let lastActivityAt = Date.now()
-let hiddenSince = 0
 let rotateIndex = 0
 
 let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -59,43 +46,15 @@ function intervalMs(): number {
   return useSettingsStore().reminder.intervalMinutes * 60_000
 }
 
-function onActivity() {
-  lastActivityAt = Date.now()
-}
-
 function resetIncense() {
   elapsedMs.value = 0
 }
 
-/** 熄香原因：决定是否需要向用户解释。 */
-type ExtinguishReason = 'manual' | 'burnt' | 'away'
-
-/**
- * 离席提示：away 熄香若发生在窗口隐藏期间，先挂起，待窗口重新可见时
- * 再置 awayNotice（由视图渲染「离席片刻，香已熄」）。
- */
-const awayNotice = ref(false)
-let awayPending = false
-
-function showAwayNoticeIfVisible() {
-  if (!document.hidden) {
-    awayNotice.value = true
-    awayPending = false
-  } else {
-    awayPending = true
-  }
-}
-
-function onVisibilityChange() {
-  if (!document.hidden && awayPending) {
-    awayPending = false
-    awayNotice.value = true
-  }
-}
-
-/** 视图展示完毕后清掉提示。 */
-function clearAwayNotice() {
-  awayNotice.value = false
+/** 熄香：手动熄或香尽自熄。 */
+function extinguish() {
+  lit.value = false
+  resetIncense()
+  dismiss()
 }
 
 /** 从已勾选的动作中轮换取一个（避免连续重复）。 */
@@ -122,18 +81,33 @@ function ignite() {
   if (!settings.reminder.enabled) return
   // 借用户手势解锁 AudioContext，香尽钟音才发得出声。
   if (settings.reminder.chime) prepareChime()
-  awayNotice.value = false
-  awayPending = false
   lit.value = true
   resetIncense()
 }
 
-/** 用户手动熄香（或香尽自动熄灭），回到未点燃态。 */
-function extinguish(reason: ExtinguishReason = 'manual') {
-  lit.value = false
-  resetIncense()
-  dismiss()
-  if (reason === 'away') showAwayNoticeIfVisible()
+const ACTION_TEXT: Record<ReminderAction, string> = {
+  stretch: COPY.breakStretch,
+  water: COPY.breakWater,
+  eyes: COPY.breakEyes,
+  breathe: COPY.breakBreathe,
+}
+
+/** 系统通知：人在别的窗口/页面、应用内 toast 看不见时才发。 */
+async function notifySystem(action: ReminderAction) {
+  try {
+    const { isPermissionGranted, requestPermission, sendNotification } =
+      await import('@tauri-apps/plugin-notification')
+    let granted = await isPermissionGranted()
+    if (!granted) granted = (await requestPermission()) === 'granted'
+    if (granted) {
+      await sendNotification({
+        title: COPY.appName,
+        body: `${COPY.incenseGone}，${ACTION_TEXT[action]}`,
+      })
+    }
+  } catch {
+    /* 通知不可用——静默降级为纯应用内提醒 */
+  }
 }
 
 function fire() {
@@ -144,6 +118,9 @@ function fire() {
   lit.value = false // 香尽自熄
   resetIncense()
   if (settings.reminder.chime) playIncenseChime()
+
+  // 人在窗外（别的应用 / 主窗已缩入托盘）时，应用内 toast 看不见，系统通知接住。
+  if (document.hidden) void notifySystem(reminderAction.value)
 
   if (escalateTimer) clearTimeout(escalateTimer)
   escalateTimer = setTimeout(() => {
@@ -162,53 +139,47 @@ function tick() {
   }
   if (!lit.value) return
 
-  const now = Date.now()
-
-  // 失焦判定。
-  if (document.hidden) {
-    if (hiddenSince === 0) hiddenSince = now
-    if (now - hiddenSince >= HIDDEN_RESET_MS) {
-      extinguish('away')
-      hiddenSince = now // 避免每 tick 重复
-    }
-    return
-  }
-  hiddenSince = 0
-
-  // 前台但长时间零操作 → 离席。
-  if (now - lastActivityAt >= IDLE_RESET_MS) {
-    extinguish('away')
-    return
-  }
-
   elapsedMs.value += TICK_MS
   if (elapsedMs.value >= intervalMs()) fire()
 }
 
-/** 挂载（进入阅读页）：仅启动计时循环与活动监听，不自动点香。 */
+/** 挂载（应用启动）：启动计时循环、立托盘、挂关窗钩子——仅此一次。
+ *  注意：模块顶层不得触碰 store——本模块经 App.vue 被顶层 import，
+ *  求值早于 main.ts 安装 Pinia，任何 eager 读取都会让整个应用白屏。 */
 function start() {
-  if (mounted) return
+  if (mounted || !isTauri()) return
   mounted = true
-  for (const e of ACTIVITY_EVENTS) {
-    window.addEventListener(e, onActivity, { passive: true, capture: true })
-  }
-  document.addEventListener('visibilitychange', onVisibilityChange)
   tickTimer = setInterval(tick, TICK_MS)
-}
 
-/** 卸载（离开阅读页）：停循环、熄香。 */
-function stop() {
-  if (!mounted) return
-  mounted = false
-  for (const e of ACTIVITY_EVENTS) {
-    window.removeEventListener(e, onActivity, { capture: true })
-  }
-  document.removeEventListener('visibilitychange', onVisibilityChange)
-  if (tickTimer) clearInterval(tickTimer)
-  tickTimer = null
-  awayPending = false
-  awayNotice.value = false
-  extinguish()
+  // 任务栏进度 + 托盘提示镜像（仅桌面端）：香燃则一线随行、悬停可读，香熄即撤。
+  watch([lit, progress, remainingText], () => {
+    getCurrentWindow()
+      .setProgressBar(
+        lit.value
+          ? { status: ProgressBarStatus.Normal, progress: Math.round(progress.value * 100) }
+          : { status: ProgressBarStatus.None },
+      )
+      .catch(() => {
+        /* 平台不支持或无权限——静默作罢 */
+      })
+    void syncTray()
+  })
+
+  void setupTray({
+    isLit: () => lit.value,
+    tooltip: () =>
+      lit.value
+        ? `${COPY.appName} · ${remainingText.value}`
+        : `${COPY.appName} · ${COPY.trayIdle}`,
+    onToggle: () => (lit.value ? extinguish() : ignite()),
+  })
+
+  // 燃香时关窗不退出，缩入托盘续烧；退出走托盘「退出」。
+  void getCurrentWindow().onCloseRequested((e) => {
+    if (!lit.value) return
+    e.preventDefault()
+    void hideToTray()
+  })
 }
 
 /** 香将尽时的预提示（香形由淡转显）。 */
@@ -228,7 +199,7 @@ const progress = computed(() => {
   return Math.min(1, elapsedMs.value / interval)
 })
 
-/** 剩余分钟文本（悬停提示）。 */
+/** 剩余分钟文本（悬停提示 / 托盘 tooltip）。 */
 const remainingText = computed(() => {
   const ms = Math.max(0, intervalMs() - elapsedMs.value)
   const min = Math.ceil(ms / 60_000)
@@ -251,10 +222,7 @@ export function useZenClock() {
     reminderOpen,
     reminderLevel,
     reminderAction,
-    awayNotice,
-    clearAwayNotice,
     start,
-    stop,
     ignite,
     extinguish,
     dismiss,

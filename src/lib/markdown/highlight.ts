@@ -80,6 +80,8 @@ export async function highlightCodeBlocks(
       const classes = codeEl.className.split(/\s+/)
       const langClass = classes.find((c) => c.startsWith('language-'))
       const langRaw = langClass?.slice('language-'.length) ?? ''
+      // mermaid 块由 mermaid.ts 渲染成图，shiki 不碰。
+      if (langRaw === 'mermaid') return
       const lang = LANG_ALIASES[langRaw] ?? langRaw
       const resolved = loadedLangs.has(lang) ? lang : 'text'
       const code = codeEl.textContent ?? ''
