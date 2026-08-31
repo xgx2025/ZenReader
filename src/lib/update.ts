@@ -1,9 +1,11 @@
 import { isTauri } from '@/lib/native'
 import { getVersion } from '@tauri-apps/api/app'
 
-/** 更新源：GitHub Releases。轻量检查即拉 releases/latest 与本版比对。 */
+/** 更新源：GitHub Releases。轻量检查即拉最新已发布版与本版比对。 */
 export const RELEASE_PAGE = 'https://github.com/xgx2025/ZenReader/releases/latest'
-const RELEASE_API = 'https://api.github.com/repos/xgx2025/ZenReader/releases/latest'
+// 用列表接口而非 releases/latest：后者排除预发布与草稿，全站若按预发布发版
+// 会 404；列表取「最新一个非草稿」即算数，与发版习惯一致。
+const RELEASES_API = 'https://api.github.com/repos/xgx2025/ZenReader/releases'
 
 /** 当前安装版本；非 Tauri 环境（浏览器 dev）无从谈起，返回 null。 */
 export async function getAppVersion(): Promise<string | null> {
@@ -15,15 +17,14 @@ export async function getAppVersion(): Promise<string | null> {
   }
 }
 
-/** 最新发布版 tag（去前导 `v`）；尚无发布（404）返回 null，网络有恙则抛出。 */
+/** 最新发布版 tag（去前导 `v`）；尚无任何发布返回 null，网络有恙则抛出。 */
 export async function fetchLatest(): Promise<string | null> {
-  const res = await fetch(RELEASE_API, {
+  const res = await fetch(`${RELEASES_API}?per_page=1`, {
     headers: { Accept: 'application/vnd.github+json' },
   })
-  if (res.status === 404) return null
-  if (!res.ok) throw new Error(`releases/latest responded ${res.status}`)
-  const data = (await res.json()) as { tag_name?: string }
-  const tag = data.tag_name?.trim()
+  if (!res.ok) throw new Error(`releases responded ${res.status}`)
+  const data = (await res.json()) as { tag_name?: string; draft?: boolean }[]
+  const tag = data.find((r) => !r.draft)?.tag_name?.trim()
   return tag ? tag.replace(/^v/i, '') : null
 }
 
