@@ -464,7 +464,7 @@ onBeforeUnmount(() => {
             <p class="mt-4 font-serif text-lg text-ink">
               {{ COPY.dropToImport }}
             </p>
-            <p class="mt-1 text-xs text-dusk">.md / .markdown</p>
+            <p class="mt-1 text-xs text-dusk">.md</p>
           </div>
         </div>
       </Transition>
