@@ -3,6 +3,8 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 use tauri::Manager;
 
+mod notes;
+
 /// A single markdown file discovered under a vault folder.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -189,7 +191,13 @@ pub fn run() {
             create_dir,
             move_file,
             read_settings,
-            write_settings
+            write_settings,
+            notes::notes_list,
+            notes::notes_add,
+            notes::notes_update,
+            notes::notes_delete,
+            notes::notes_move_document,
+            notes::notes_delete_document
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZenReader");

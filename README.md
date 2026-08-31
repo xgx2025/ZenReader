@@ -25,7 +25,7 @@
 | 框架 | Vue 3 (Composition API) + TypeScript + Vite |
 | 样式 | Tailwind CSS 4（`@theme` 设计 token，CSS-first） |
 | 路由 / 状态 | Vue Router 4 + Pinia |
-| 本地存储 | IndexedDB（Dexie 4），`liveQuery` 响应式书库 |
+| 本地存储 | 觉悟笔记 → 书库内 `.zenreader/notes.db`（SQLite，Rust rusqlite）；设置 → 应用配置目录 `settings.json`；阅读进度 → localStorage（防抖） |
 | Markdown | markdown-it（GFM + 脚注 + 任务列表 + KaTeX 公式）+ js-yaml（frontmatter）+ DOMPurify（消毒） |
 | 代码高亮 | Shiki（懒加载，按需加载语言） |
 | 桌面端 | Tauri 2 + Rust（`src-tauri/`），原生文件夹读写、系统托盘与通知 |
@@ -68,19 +68,21 @@ npm run test:unit  # Vitest 单元测试（jsdom，覆盖 markdown 渲染管线�
 
 ```
 src-tauri/               # Tauri 桌面端（Rust）
-├── src/lib.rs           # pick_folder / read_vault / read_file / write_file 命令
+├── src/lib.rs           # pick_folder / read_vault / read_file / write_file / 设置 命令
+├── src/notes.rs         # 觉悟笔记 SQLite（.zenreader/notes.db）命令
 └── tauri.conf.json
 src/
 ├── assets/styles/        # Tailwind 入口 + @theme token + .zen-prose 排版
 ├── types/                # Document / Note / Settings / Import
 ├── lib/
-│   ├── db/               # Dexie schema + repo（documents / notes）
+│   ├── vault.ts          # 书库路径辅助 + 文档互链解析
+│   ├── notesApi.ts       # 觉悟笔记的 SQLite 持久化入口（薄封装）
 │   ├── markdown/         # parser / frontmatter / structure / highlight / mermaid / sanitize
 │   ├── anchor/textAnchor.ts  # 选区捕获 + 高亮还原（框架无关）
 │   ├── chime.ts          # WebAudio 合成音效（入定钵、香尽颂钵等）
 │   ├── trayClock.ts      # 系统托盘专注钟（缩托盘续烧、悬停进度）
-│   └── native.ts         # Tauri 检测 + 文件系统命令封装
-├── stores/               # library / reader / notes / settings
+│   └── native.ts         # Tauri 检测 + 文件系统 / 笔记命令封装
+├── stores/               # library / reader / notes / progress / settings
 ├── composables/          # useZenClock / usePaperTexture / useFullscreen / useFileImport …
 ├── components/           # common / library / reader / notes
 └── views/                # LibraryView / ImportView / ReaderView

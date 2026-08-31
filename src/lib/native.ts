@@ -2,6 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
 
 import type { VaultFile, VaultListing } from '@/types/document'
+import type { Note } from '@/types/note'
 
 export type { VaultFile, VaultListing }
 export { isTauri }
@@ -61,5 +62,41 @@ export const nativeFs = {
   /** Write settings JSON to the app config dir (file-based persistence). */
   writeSettings(content: string): Promise<void> {
     return invoke('write_settings', { content })
+  },
+}
+
+/**
+ * 觉悟笔记的 SQLite 后端命令。`dir` 一律是书库根路径；相对路径由 Rust 侧
+ * 拼 `.zenreader/notes.db`。参数经 Tauri 自动转 camelCase（snake_case → camelCase）。
+ */
+export const nativeNotes = {
+  list(dir: string, relativePath: string): Promise<Note[]> {
+    return invoke<Note[]>('notes_list', { dir, relativePath })
+  },
+
+  add(dir: string, note: Note): Promise<void> {
+    return invoke('notes_add', { dir, note })
+  },
+
+  update(
+    dir: string,
+    id: string,
+    noteText: string | null,
+    kind: string | null,
+    updatedAt: string,
+  ): Promise<void> {
+    return invoke('notes_update', { dir, id, noteText, kind, updatedAt })
+  },
+
+  remove(dir: string, id: string): Promise<void> {
+    return invoke('notes_delete', { dir, id })
+  },
+
+  moveDocument(dir: string, from: string, to: string): Promise<void> {
+    return invoke('notes_move_document', { dir, from, to })
+  },
+
+  deleteDocument(dir: string, relativePath: string): Promise<void> {
+    return invoke('notes_delete_document', { dir, relativePath })
   },
 }

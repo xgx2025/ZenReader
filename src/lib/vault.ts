@@ -1,6 +1,3 @@
-import { nativeFs } from '@/lib/native'
-import type { Note } from '@/types/note'
-
 /** Join path segments with `/`, dropping empty parts. */
 export function joinPath(...segs: string[]): string {
   return segs.filter(Boolean).join('/')
@@ -58,35 +55,4 @@ export function resolveTitle(
   const t = frontmatter.title
   if (typeof t === 'string' && t.trim()) return t.trim()
   return titleFromName(name)
-}
-
-/** Hidden sidecar inside the vault holding all 觉悟笔记. */
-const NOTES_FILE = '.zenreader/notes.json'
-
-/** `{ [relativePath]: Note[] }` — the whole vault's notes in one file. */
-export type NotesIndex = Record<string, Note[]>
-
-/** Read the notes index; falls back to `{}` when missing or invalid. */
-export async function readNotesIndex(vaultPath: string): Promise<NotesIndex> {
-  try {
-    const raw = await nativeFs.readFile(vaultFile(vaultPath, NOTES_FILE))
-    const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as NotesIndex
-    }
-  } catch {
-    /* missing or invalid — start fresh */
-  }
-  return {}
-}
-
-/** Write the notes index back to disk (creates `.zenreader/` as needed). */
-export async function writeNotesIndex(
-  vaultPath: string,
-  index: NotesIndex,
-): Promise<void> {
-  await nativeFs.writeFile(
-    vaultFile(vaultPath, NOTES_FILE),
-    JSON.stringify(index, null, 2),
-  )
 }
