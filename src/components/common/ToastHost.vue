@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useToast, type ToastTone } from '@/composables/useToast'
+import { useToast, type ToastItem, type ToastTone } from '@/composables/useToast'
 
 const { toasts } = useToast()
 
@@ -7,6 +7,12 @@ const TONE: Record<ToastTone, { dot: string; text: string }> = {
   bamboo: { dot: 'bg-bamboo', text: 'text-ink-soft' },
   sandal: { dot: 'bg-sandal', text: 'text-sandal' },
   dusk: { dot: 'bg-dusk', text: 'text-ink-soft' },
+}
+
+/** 执行动作并让该条 toast 提前散去，不留悬尾。 */
+function runAction(t: ToastItem) {
+  t.action?.onClick()
+  toasts.value = toasts.value.filter((x) => x.id !== t.id)
 }
 </script>
 
@@ -25,6 +31,13 @@ const TONE: Record<ToastTone, { dot: string; text: string }> = {
         >
           <span class="h-1 w-1 rounded-full" :class="TONE[t.tone].dot" />
           {{ t.message }}
+          <button
+            v-if="t.action"
+            class="pointer-events-auto rounded-full font-medium text-bamboo transition-colors hover:text-ink"
+            @click="runAction(t)"
+          >
+            {{ t.action.label }}
+          </button>
         </p>
       </TransitionGroup>
     </div>

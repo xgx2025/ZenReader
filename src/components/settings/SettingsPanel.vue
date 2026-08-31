@@ -4,7 +4,7 @@
  * 阅读页收排版类设置，禅境页收入定与禅钟；页签只是视图分组，
  * 各控件直接读写 settings store，无独立状态。
  */
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -15,6 +15,8 @@ import {
 } from '@/components/reader/zenRituals'
 import { useSettingsStore } from '@/stores/settings'
 import { nativeFs, isTauri } from '@/lib/native'
+import { getAppVersion } from '@/lib/update'
+import { useUpdateCheck } from '@/composables/useUpdateCheck'
 import { COPY } from '@/lib/copy'
 import type {
   ReaderFont,
@@ -30,6 +32,15 @@ const emit = defineEmits<{ close: [] }>()
 
 const settings = useSettingsStore()
 const inTauri = isTauri()
+
+// 关于行：展示版本 + 检查更新（与 App.vue 的启动静默检查共用同一份状态）。
+const { checking, currentVersion, checkUpdate } = useUpdateCheck()
+onMounted(() => {
+  if (!inTauri) return
+  getAppVersion().then((v) => {
+    if (v) currentVersion.value = v
+  })
+})
 
 /** 面板页签：阅读排版 / 禅境（入定 + 禅钟）。 */
 type SettingsTab = 'reading' | 'zen'
@@ -520,7 +531,7 @@ onBeforeUnmount(closePreview)
       </Transition>
     </Teleport>
 
-    <!-- 底部固定：书库目录（低频，一行收窄） -->
+    <!-- 底部固定：书库目录（低频，一行收窄） + 关于（版本与更新检查） -->
     <template #footer>
       <div class="flex items-center gap-2 border-t border-line px-5 py-3">
         <ZIcon name="folder" :size="15" class="shrink-0 text-sandal" />
@@ -546,6 +557,24 @@ onBeforeUnmount(closePreview)
         >
           {{ COPY.clearFolder }}
         </button>
+      </div>
+
+      <div class="flex items-center gap-2 border-t border-line px-5 py-3">
+        <ZIcon name="about" :size="15" class="shrink-0 text-sandal" />
+        <span class="min-w-0 flex-1 truncate text-sm text-ink">
+          {{ COPY.about }}<template v-if="currentVersion">
+            · v{{ currentVersion }}</template
+          >
+        </span>
+        <button
+          v-if="inTauri"
+          class="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink disabled:cursor-wait disabled:opacity-50"
+          :disabled="checking"
+          @click="checkUpdate(true)"
+        >
+          {{ checking ? COPY.checkingUpdate : COPY.checkUpdate }}
+        </button>
+        <span v-else class="shrink-0 text-xs text-dusk">{{ COPY.desktopOnly }}</span>
       </div>
     </template>
   </BaseDialog>

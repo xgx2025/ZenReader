@@ -6,6 +6,8 @@ export interface ToastItem {
   id: number
   message: string
   tone: ToastTone
+  /** 可点动作（如更新提示的「前往」）；点击后该条 toast 提前散去。 */
+  action?: { label: string; onClick: () => void }
 }
 
 const toasts = ref<ToastItem[]>([])
@@ -20,13 +22,17 @@ const lastShown = new Map<string, number>()
  * 模块级单例：任何静默失败之处一声轻唤，同文案 5 秒内不重复。
  */
 export function useToast() {
-  function notify(message: string, tone: ToastTone = 'bamboo') {
+  function notify(
+    message: string,
+    tone: ToastTone = 'bamboo',
+    action?: ToastItem['action'],
+  ) {
     const now = Date.now()
     if (now - (lastShown.get(message) ?? 0) < DEDUPE_WINDOW) return
     lastShown.set(message, now)
 
     const id = ++nextId
-    toasts.value.push({ id, message, tone })
+    toasts.value.push({ id, message, tone, action })
     setTimeout(() => {
       toasts.value = toasts.value.filter((t) => t.id !== id)
     }, DURATION)

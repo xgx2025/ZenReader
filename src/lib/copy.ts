@@ -59,6 +59,16 @@ export const COPY = {
   importSkipped: '已略过',
   importTo: '引入到',
 
+  // 更新检查（关于软件更新）
+  about: '关于',
+  checkUpdate: '检查更新',
+  checkingUpdate: '探问中…',
+  updateAvailable: '新卷已至', // 拼版本号：新卷已至 v0.2.0
+  updateGoFetch: '前往',
+  upToDate: '已是最新',
+  noReleaseYet: '尚未发布',
+  updateCheckFailed: '探问不得，网络有恙',
+
   // 设置面板（调适）
   theme: '主题',
   themeLight: '明亮',
