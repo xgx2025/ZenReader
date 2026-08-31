@@ -2,6 +2,8 @@ import MarkdownIt from 'markdown-it'
 import anchor from 'markdown-it-anchor'
 import taskLists from 'markdown-it-task-lists'
 import footnote from 'markdown-it-footnote'
+import texmath from 'markdown-it-texmath'
+import katex from 'katex'
 
 import { sanitizeHtml } from './sanitize'
 import { extractStructure, htmlToPlainText } from './structure'
@@ -19,6 +21,32 @@ const md = new MarkdownIt({
   .use(taskLists)
   .use(footnote)
   .use(cjkEmphasis)
+  .use(texmath, {
+    engine: katex,
+    // `$…$` / `$$…$$` / `\begin{…}…\end{…}` / `\(…\)` / `\[…\]` 一网打尽。
+    delimiters: ['dollars', 'beg_end', 'brackets'],
+    katexOptions: { throwOnError: false, strict: false },
+  })
+
+/** KaTeX 渲染公式，错误降级为红字源码而非抛异常；strict 关掉 LaTeX 兼容性
+    告警，中文文档里偶发的「伪公式」不再向控制台刷警告。 */
+function renderKatex(tex: string, displayMode: boolean): string {
+  return katex.renderToString(tex, { displayMode, throwOnError: false, strict: false })
+}
+
+// texmath 默认用 <eq>/<eqn> 包裹，这两个自定义标签会被 DOMPurify 剥掉——
+// 换成与 .mermaid-figure 同构的标准元素：行内 span / 行间 div。
+md.renderer.rules.math_inline = (tokens, idx) =>
+  `<span class="zen-math-inline">${renderKatex(tokens[idx].content, false)}</span>`
+md.renderer.rules.math_inline_double = (tokens, idx) =>
+  `<span class="zen-math-inline">${renderKatex(tokens[idx].content, true)}</span>`
+md.renderer.rules.math_block = (tokens, idx) =>
+  `<div class="zen-math-block">${renderKatex(tokens[idx].content, true)}</div>`
+md.renderer.rules.math_block_eqno = (tokens, idx) =>
+  `<div class="zen-math-block zen-math-block-eqno">${renderKatex(
+    tokens[idx].content,
+    true,
+  )}<span class="zen-math-eqno">(${tokens[idx].info})</span></div>`
 
 // First-line link guard: allow http/https/mailto and relative paths only.
 const SAFE_LINK = /^(?:https?:\/\/|mailto:|#|\/|\.{1,2}\/)/i

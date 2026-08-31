@@ -9,6 +9,9 @@ import { useSettingsStore } from './stores/settings'
 // depends on fonts the user happens to have installed.
 import '@fontsource-variable/noto-serif-sc'
 
+// KaTeX 数学排版：公式的基线对齐、上下标定位全靠这套 CSS + 自带字体。
+import 'katex/dist/katex.min.css'
+
 import './assets/styles/main.css'
 import './assets/styles/typography.css'
 import './assets/styles/motion.css'
