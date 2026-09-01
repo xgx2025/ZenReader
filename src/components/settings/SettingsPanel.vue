@@ -204,96 +204,172 @@ onBeforeUnmount(closePreview)
       </div>
     </div>
 
-    <!-- 阅读：主题 → 纸纹 → 字体 → 排版数值 → 段落 -->
+    <!-- 阅读：外观 → 排版 → 段落 -->
     <div v-show="tab === 'reading'" role="tabpanel" :aria-label="COPY.reading" class="px-5 pb-5">
-      <h3 class="text-xs font-medium tracking-wide text-dusk">
-        {{ COPY.theme }}
+      <h3 class="flex items-center gap-1.5 text-sm font-medium text-ink-soft">
+        {{ COPY.appearance }}
       </h3>
-      <div class="mt-2.5 flex rounded-full border border-line p-0.5">
-        <button
-          v-for="t in THEMES"
-          :key="t.key"
-          class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
-          :class="{ 'bg-bamboo/15 text-ink': settings.theme === t.key }"
-          @click="settings.setTheme(t.key)"
-        >
-          {{ t.label }}
-        </button>
-      </div>
+      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
+        <span class="block text-xs text-ink-soft">{{ COPY.theme }}</span>
+        <div class="mt-2 flex rounded-full border border-line p-0.5">
+          <button
+            v-for="t in THEMES"
+            :key="t.key"
+            class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
+            :class="{ 'bg-bamboo/15 text-ink': settings.theme === t.key }"
+            @click="settings.setTheme(t.key)"
+          >
+            {{ t.label }}
+          </button>
+        </div>
 
-      <h3 class="mt-5 text-xs font-medium tracking-wide text-dusk">
-        {{ COPY.paperTexture }}
-      </h3>
-      <div class="mt-2.5 flex rounded-full border border-line p-0.5">
-        <button
-          v-for="p in PAPER_TEXTURES"
-          :key="p.key"
-          class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
-          :class="{ 'bg-bamboo/15 text-ink': settings.paperTexture === p.key }"
-          @click="settings.update({ paperTexture: p.key })"
-        >
-          {{ p.label }}
-        </button>
-      </div>
+        <span class="mt-3 block text-xs text-ink-soft">{{ COPY.paperTexture }}</span>
+        <div class="mt-2 flex rounded-full border border-line p-0.5">
+          <button
+            v-for="p in PAPER_TEXTURES"
+            :key="p.key"
+            class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
+            :class="{ 'bg-bamboo/15 text-ink': settings.paperTexture === p.key }"
+            @click="settings.update({ paperTexture: p.key })"
+          >
+            {{ p.label }}
+          </button>
+        </div>
 
-      <h3 class="mt-5 text-xs font-medium tracking-wide text-dusk">
-        {{ COPY.font }}
-      </h3>
-      <div class="mt-2.5 flex rounded-full border border-line p-0.5">
-        <button
-          v-for="f in FONTS"
-          :key="f.key"
-          class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
-          :class="{ 'bg-bamboo/15 text-ink': settings.fontFamily === f.key }"
-          @click="settings.update({ fontFamily: f.key })"
-        >
-          {{ f.label }}
-        </button>
-      </div>
-
-      <div class="mt-5 space-y-4">
-        <div v-for="r in RANGES" :key="r.key">
-          <div class="flex items-center justify-between text-xs">
-            <span class="text-ink-soft">{{ r.label }}</span>
-            <span class="tabular-nums text-dusk">
-              {{ rangeValue(r.key) }}
-            </span>
-          </div>
-          <input
-            type="range"
-            class="mt-2 w-full accent-bamboo"
-            :min="r.min"
-            :max="r.max"
-            :step="r.step"
-            :value="rangeValue(r.key)"
-            @input="onRange($event, r.key)"
-          />
+        <span class="mt-3 block text-xs text-ink-soft">{{ COPY.font }}</span>
+        <div class="mt-2 flex rounded-full border border-line p-0.5">
+          <button
+            v-for="f in FONTS"
+            :key="f.key"
+            class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
+            :class="{ 'bg-bamboo/15 text-ink': settings.fontFamily === f.key }"
+            @click="settings.update({ fontFamily: f.key })"
+          >
+            {{ f.label }}
+          </button>
         </div>
       </div>
 
-      <div class="mt-5 space-y-4">
-        <div
-          v-for="tg in TOGGLES"
-          :key="tg.key"
-          class="flex items-center justify-between"
-        >
-          <span class="text-xs text-ink-soft">{{ tg.label }}</span>
+      <h3 class="mt-5 flex items-center gap-1.5 text-sm font-medium text-ink-soft">
+        {{ COPY.typography }}
+      </h3>
+      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
+        <div class="space-y-4">
+          <div v-for="r in RANGES" :key="r.key">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-ink-soft">{{ r.label }}</span>
+              <span class="tabular-nums text-dusk">
+                {{ rangeValue(r.key) }}
+              </span>
+            </div>
+            <input
+              type="range"
+              class="mt-2 w-full accent-bamboo"
+              :min="r.min"
+              :max="r.max"
+              :step="r.step"
+              :value="rangeValue(r.key)"
+              @input="onRange($event, r.key)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <h3 class="mt-5 flex items-center gap-1.5 text-sm font-medium text-ink-soft">
+        {{ COPY.paragraph }}
+      </h3>
+      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
+        <div class="space-y-4">
+          <div
+            v-for="tg in TOGGLES"
+            :key="tg.key"
+            class="flex items-center justify-between"
+          >
+            <span class="text-xs text-ink-soft">{{ tg.label }}</span>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="settings[tg.key]"
+              class="relative h-5 w-9 rounded-full border transition-colors duration-200"
+              :class="
+                settings[tg.key]
+                  ? 'border-bamboo bg-bamboo/25'
+                  : 'border-line bg-paper-deep'
+              "
+              @click="onToggle(tg.key)"
+            >
+              <span
+                class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                :class="
+                  settings[tg.key]
+                    ? 'left-[1.15rem] bg-bamboo'
+                    : 'left-0.5 bg-dusk'
+                "
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 禅境：入定 → 禅钟 -->
+    <div v-show="tab === 'zen'" role="tabpanel" :aria-label="COPY.zenMode" class="px-5 pb-5">
+      <h3 class="flex items-center gap-1.5 text-sm font-medium text-ink-soft">
+        {{ COPY.entryGroup }}
+      </h3>
+      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-ink-soft">{{ COPY.zenEntry }}</span>
+          <button
+            class="rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink"
+            @click="playPreview"
+          >
+            {{ COPY.zenEntryPreview }}
+          </button>
+        </div>
+        <div class="mt-2 grid grid-cols-3 gap-2">
+          <button
+            v-for="s in ZEN_ENTRY_OPTIONS"
+            :key="s.key"
+            class="rounded-full border px-2 py-1.5 text-xs transition-colors"
+            :class="
+              settings.zenEntry === s.key
+                ? 'border-bamboo bg-bamboo/15 text-ink'
+                : 'border-line text-ink-soft hover:border-bamboo'
+            "
+            :title="s.hint"
+            @click="settings.update({ zenEntry: s.key })"
+          >
+            {{ s.label }}
+          </button>
+        </div>
+        <p class="mt-2 text-[11px] leading-snug text-dusk">
+          {{ currentZenEntry?.hint }}
+        </p>
+
+        <div class="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
+          <div>
+            <span class="text-xs text-ink-soft">{{ COPY.immersiveFullscreen }}</span>
+            <p class="mt-0.5 text-[11px] leading-snug text-dusk">
+              {{ COPY.immersiveFullscreenHint }}
+            </p>
+          </div>
           <button
             type="button"
             role="switch"
-            :aria-checked="settings[tg.key]"
-            class="relative h-5 w-9 rounded-full border transition-colors duration-200"
+            :aria-checked="settings.immersiveFullscreen"
+            class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
             :class="
-              settings[tg.key]
+              settings.immersiveFullscreen
                 ? 'border-bamboo bg-bamboo/25'
                 : 'border-line bg-paper-deep'
             "
-            @click="onToggle(tg.key)"
+            @click="settings.update({ immersiveFullscreen: !settings.immersiveFullscreen })"
           >
             <span
               class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
               :class="
-                settings[tg.key]
+                settings.immersiveFullscreen
                   ? 'left-[1.15rem] bg-bamboo'
                   : 'left-0.5 bg-dusk'
               "
@@ -301,208 +377,149 @@ onBeforeUnmount(closePreview)
           </button>
         </div>
       </div>
-    </div>
 
-    <!-- 禅境：入定动画 → 沉浸全屏 → 禅钟 -->
-    <div v-show="tab === 'zen'" role="tabpanel" :aria-label="COPY.zenMode" class="px-5 pb-5">
-      <div class="flex items-center justify-between">
-        <h3 class="text-xs font-medium tracking-wide text-dusk">
-          {{ COPY.zenEntry }}
-        </h3>
-        <button
-          class="rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink"
-          @click="playPreview"
-        >
-          {{ COPY.zenEntryPreview }}
-        </button>
-      </div>
-      <div class="mt-2.5 flex rounded-full border border-line p-0.5">
-        <button
-          v-for="s in ZEN_ENTRY_OPTIONS"
-          :key="s.key"
-          class="flex-1 rounded-full px-2 py-1.5 text-xs text-ink-soft transition-colors"
-          :class="{ 'bg-bamboo/15 text-ink': settings.zenEntry === s.key }"
-          :title="s.hint"
-          @click="settings.update({ zenEntry: s.key })"
-        >
-          {{ s.label }}
-        </button>
-      </div>
-      <p class="mt-2 text-[11px] leading-snug text-dusk">
-        {{ currentZenEntry?.hint }}
-      </p>
-
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <div>
-          <span class="text-xs text-ink-soft">{{ COPY.immersiveFullscreen }}</span>
-          <p class="mt-0.5 text-[11px] leading-snug text-dusk">
-            {{ COPY.immersiveFullscreenHint }}
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="settings.immersiveFullscreen"
-          class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
-          :class="
-            settings.immersiveFullscreen
-              ? 'border-bamboo bg-bamboo/25'
-              : 'border-line bg-paper-deep'
-          "
-          @click="settings.update({ immersiveFullscreen: !settings.immersiveFullscreen })"
-        >
-          <span
-            class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
-            :class="
-              settings.immersiveFullscreen
-                ? 'left-[1.15rem] bg-bamboo'
-                : 'left-0.5 bg-dusk'
-            "
-          />
-        </button>
-      </div>
-
-      <h3 class="mt-6 text-xs font-medium tracking-wide text-dusk">
+      <h3 class="mt-5 flex items-center gap-1.5 text-sm font-medium text-ink-soft">
         {{ COPY.zenClock }}
       </h3>
-
-      <div class="mt-3 flex items-center justify-between">
-        <span class="text-xs text-ink-soft">{{ COPY.reminderEnable }}</span>
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="settings.reminder.enabled"
-          class="relative h-5 w-9 rounded-full border transition-colors duration-200"
-          :class="
-            settings.reminder.enabled
-              ? 'border-bamboo bg-bamboo/25'
-              : 'border-line bg-paper-deep'
-          "
-          @click="settings.updateReminder({ enabled: !settings.reminder.enabled })"
-        >
-          <span
-            class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-ink-soft">{{ COPY.reminderEnable }}</span>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="settings.reminder.enabled"
+            class="relative h-5 w-9 rounded-full border transition-colors duration-200"
             :class="
               settings.reminder.enabled
-                ? 'left-[1.15rem] bg-bamboo'
-                : 'left-0.5 bg-dusk'
+                ? 'border-bamboo bg-bamboo/25'
+                : 'border-line bg-paper-deep'
             "
+            @click="settings.updateReminder({ enabled: !settings.reminder.enabled })"
+          >
+            <span
+              class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+              :class="
+                settings.reminder.enabled
+                  ? 'left-[1.15rem] bg-bamboo'
+                  : 'left-0.5 bg-dusk'
+              "
+            />
+          </button>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-ink-soft">{{ COPY.reminderInterval }}</span>
+            <span class="tabular-nums text-dusk">
+              {{ settings.reminder.intervalMinutes }}
+              {{ COPY.reminderIntervalUnit }}
+            </span>
+          </div>
+          <div class="mt-2 flex gap-2">
+            <button
+              v-for="p in PRESETS"
+              :key="p.minutes"
+              type="button"
+              class="flex-1 rounded-full border px-2 py-1.5 text-xs transition-colors"
+              :class="
+                settings.reminder.intervalMinutes === p.minutes
+                  ? 'border-bamboo bg-bamboo/15 text-ink'
+                  : 'border-line text-ink-soft hover:border-bamboo'
+              "
+              @click="setPreset(p.minutes)"
+            >
+              {{ p.label }}
+            </button>
+          </div>
+          <input
+            type="range"
+            class="mt-2 w-full accent-bamboo"
+            min="5"
+            max="120"
+            step="5"
+            :value="settings.reminder.intervalMinutes"
+            @input="onReminderInterval"
           />
-        </button>
-      </div>
-
-      <div class="mt-4">
-        <div class="flex items-center justify-between text-xs">
-          <span class="text-ink-soft">{{ COPY.reminderInterval }}</span>
-          <span class="tabular-nums text-dusk">
-            {{ settings.reminder.intervalMinutes }}
-            {{ COPY.reminderIntervalUnit }}
-          </span>
         </div>
-        <div class="mt-2 flex gap-2">
+
+        <div class="mt-4">
+          <p class="text-xs text-ink-soft">{{ COPY.reminderActions }}</p>
+          <div class="mt-2 flex gap-2">
+            <button
+              v-for="a in ACTIONS"
+              :key="a.key"
+              class="flex-1 rounded-full border px-2 py-1.5 text-xs transition-colors"
+              :class="
+                settings.reminder.actions.includes(a.key)
+                  ? 'border-bamboo bg-bamboo/15 text-ink'
+                  : 'border-line text-ink-soft hover:border-bamboo'
+              "
+              @click="toggleAction(a.key)"
+            >
+              {{ a.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 flex items-center justify-between gap-3">
+          <div>
+            <span class="text-xs text-ink-soft">{{ COPY.reminderPreHint }}</span>
+            <p class="mt-0.5 text-[11px] leading-snug text-dusk">
+              {{ COPY.reminderPreHintHint }}
+            </p>
+          </div>
           <button
-            v-for="p in PRESETS"
-            :key="p.minutes"
             type="button"
-            class="flex-1 rounded-full border px-2 py-1.5 text-xs transition-colors"
-            :class="
-              settings.reminder.intervalMinutes === p.minutes
-                ? 'border-bamboo bg-bamboo/15 text-ink'
-                : 'border-line text-ink-soft hover:border-bamboo'
-            "
-            @click="setPreset(p.minutes)"
-          >
-            {{ p.label }}
-          </button>
-        </div>
-        <input
-          type="range"
-          class="mt-2 w-full accent-bamboo"
-          min="5"
-          max="120"
-          step="5"
-          :value="settings.reminder.intervalMinutes"
-          @input="onReminderInterval"
-        />
-      </div>
-
-      <div class="mt-4">
-        <p class="text-xs text-ink-soft">{{ COPY.reminderActions }}</p>
-        <div class="mt-2 flex gap-2">
-          <button
-            v-for="a in ACTIONS"
-            :key="a.key"
-            class="flex-1 rounded-full border px-2 py-1.5 text-xs transition-colors"
-            :class="
-              settings.reminder.actions.includes(a.key)
-                ? 'border-bamboo bg-bamboo/15 text-ink'
-                : 'border-line text-ink-soft hover:border-bamboo'
-            "
-            @click="toggleAction(a.key)"
-          >
-            {{ a.label }}
-          </button>
-        </div>
-      </div>
-
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <div>
-          <span class="text-xs text-ink-soft">{{ COPY.reminderPreHint }}</span>
-          <p class="mt-0.5 text-[11px] leading-snug text-dusk">
-            {{ COPY.reminderPreHintHint }}
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="settings.reminder.preHint"
-          class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
-          :class="
-            settings.reminder.preHint
-              ? 'border-bamboo bg-bamboo/25'
-              : 'border-line bg-paper-deep'
-          "
-          @click="settings.updateReminder({ preHint: !settings.reminder.preHint })"
-        >
-          <span
-            class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+            role="switch"
+            :aria-checked="settings.reminder.preHint"
+            class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
             :class="
               settings.reminder.preHint
-                ? 'left-[1.15rem] bg-bamboo'
-                : 'left-0.5 bg-dusk'
+                ? 'border-bamboo bg-bamboo/25'
+                : 'border-line bg-paper-deep'
             "
-          />
-        </button>
-      </div>
-
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <div>
-          <span class="text-xs text-ink-soft">{{ COPY.reminderChime }}</span>
-          <p class="mt-0.5 text-[11px] leading-snug text-dusk">
-            {{ COPY.reminderChimeHint }}
-          </p>
+            @click="settings.updateReminder({ preHint: !settings.reminder.preHint })"
+          >
+            <span
+              class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+              :class="
+                settings.reminder.preHint
+                  ? 'left-[1.15rem] bg-bamboo'
+                  : 'left-0.5 bg-dusk'
+              "
+            />
+          </button>
         </div>
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="settings.reminder.chime"
-          class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
-          :class="
-            settings.reminder.chime
-              ? 'border-bamboo bg-bamboo/25'
-              : 'border-line bg-paper-deep'
-          "
-          @click="settings.updateReminder({ chime: !settings.reminder.chime })"
-        >
-          <span
-            class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+
+        <div class="mt-4 flex items-center justify-between gap-3">
+          <div>
+            <span class="text-xs text-ink-soft">{{ COPY.reminderChime }}</span>
+            <p class="mt-0.5 text-[11px] leading-snug text-dusk">
+              {{ COPY.reminderChimeHint }}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="settings.reminder.chime"
+            class="relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-200"
             :class="
               settings.reminder.chime
-                ? 'left-[1.15rem] bg-bamboo'
-                : 'left-0.5 bg-dusk'
+                ? 'border-bamboo bg-bamboo/25'
+                : 'border-line bg-paper-deep'
             "
-          />
-        </button>
+            @click="settings.updateReminder({ chime: !settings.reminder.chime })"
+          >
+            <span
+              class="absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+              :class="
+                settings.reminder.chime
+                  ? 'left-[1.15rem] bg-bamboo'
+                  : 'left-0.5 bg-dusk'
+              "
+            />
+          </button>
+        </div>
       </div>
     </div>
 
@@ -531,32 +548,37 @@ onBeforeUnmount(closePreview)
       </Transition>
     </Teleport>
 
-    <!-- 底部固定：书库目录（低频，一行收窄） + 关于（版本与更新检查） -->
+    <!-- 底部固定：书库目录（低频，标签+内容两行） + 关于（版本与更新检查） -->
     <template #footer>
-      <div class="flex items-center gap-2 border-t border-line px-5 py-3">
-        <ZIcon name="folder" :size="15" class="shrink-0 text-sandal" />
-        <span
-          class="min-w-0 flex-1 truncate text-sm"
-          :class="settings.vaultPath ? 'text-ink' : 'text-dusk'"
-          :title="settings.vaultPath || undefined"
-        >
-          {{ settings.vaultPath || COPY.noFolder }}
-        </span>
-        <button
-          v-if="inTauri"
-          class="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink"
-          @click="pickVaultFolder"
-        >
-          {{ COPY.chooseFolder }}
-        </button>
-        <span v-else class="shrink-0 text-xs text-dusk">{{ COPY.desktopOnly }}</span>
-        <button
-          v-if="settings.vaultPath"
-          class="shrink-0 rounded-full px-3 py-1 text-xs text-dusk transition-colors hover:text-sandal"
-          @click="settings.setVaultPath('')"
-        >
-          {{ COPY.clearFolder }}
-        </button>
+      <div class="border-t border-line px-5 py-3">
+        <div class="flex items-center gap-1.5">
+          <ZIcon name="folder" :size="14" class="shrink-0 text-sandal" />
+          <span class="text-xs font-medium text-ink-soft">{{ COPY.vaultFolder }}</span>
+        </div>
+        <div class="mt-2 flex items-center gap-2">
+          <span
+            class="min-w-0 flex-1 truncate text-sm"
+            :class="settings.vaultPath ? 'text-ink' : 'text-dusk'"
+            :title="settings.vaultPath || undefined"
+          >
+            {{ settings.vaultPath || COPY.noFolder }}
+          </span>
+          <button
+            v-if="inTauri"
+            class="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink"
+            @click="pickVaultFolder"
+          >
+            {{ COPY.chooseFolder }}
+          </button>
+          <span v-else class="shrink-0 text-xs text-dusk">{{ COPY.desktopOnly }}</span>
+          <button
+            v-if="settings.vaultPath"
+            class="shrink-0 rounded-full px-3 py-1 text-xs text-dusk transition-colors hover:text-sandal"
+            @click="settings.setVaultPath('')"
+          >
+            {{ COPY.clearFolder }}
+          </button>
+        </div>
       </div>
 
       <div class="flex items-center gap-2 border-t border-line px-5 py-3">
