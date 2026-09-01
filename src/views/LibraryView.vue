@@ -212,7 +212,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-h-screen text-ink">
+  <div class="flex h-screen flex-col overflow-hidden text-ink">
     <header
       class="header-fade sticky top-0 z-10 flex items-center justify-between bg-paper/55 px-6 py-4 backdrop-blur-md"
     >
@@ -276,8 +276,8 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div v-else class="flex">
-      <aside class="hidden w-56 shrink-0 p-4 md:block">
+    <div v-else class="flex min-h-0 flex-1">
+      <aside class="hidden h-full w-56 shrink-0 overflow-y-auto p-4 md:block">
         <button
           class="mb-2 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10 hover:text-ink"
           :class="{ 'bg-bamboo/15 font-medium text-ink': !library.selectedFolder }"
@@ -342,7 +342,7 @@ onBeforeUnmount(() => {
         </p>
       </aside>
 
-      <main class="min-w-0 flex-1 p-6">
+      <main class="h-full min-w-0 flex-1 overflow-y-auto p-6">
         <div class="mb-6 flex flex-wrap items-center gap-3">
           <div class="relative min-w-0 max-w-md flex-1">
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dusk">
