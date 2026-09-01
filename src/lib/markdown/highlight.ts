@@ -58,6 +58,19 @@ const LANG_ALIASES: Record<string, string> = {
   txt: 'text',
 }
 
+/** 左上角语言标签 —— 注入 `.code-lang`，跟随 .code-copy 同款浮签；
+    无语言标注的裸块不显示。重复执行安全（按存在性跳过，主题切换重跑不重复）。 */
+function ensureLangLabel(pre: HTMLElement, langRaw: string): void {
+  if (!langRaw) return
+  let label = pre.querySelector<HTMLElement>('.code-lang')
+  if (!label) {
+    label = document.createElement('span')
+    label.className = 'code-lang'
+    pre.appendChild(label)
+  }
+  label.textContent = langRaw
+}
+
 /**
  * Highlight every `<pre><code class="language-x">` in `container` in place.
  * Keeps the outer `<code class="language-x">` intact (only swaps inner spans),
@@ -82,6 +95,8 @@ export async function highlightCodeBlocks(
       const langRaw = langClass?.slice('language-'.length) ?? ''
       // mermaid 块由 mermaid.ts 渲染成图，shiki 不碰。
       if (langRaw === 'mermaid') return
+      // 语言标签只依赖 class，不依赖高亮成败 —— 放在 try 之前。
+      if (codeEl.parentElement) ensureLangLabel(codeEl.parentElement, langRaw)
       const lang = LANG_ALIASES[langRaw] ?? langRaw
       const resolved = loadedLangs.has(lang) ? lang : 'text'
       const code = codeEl.textContent ?? ''

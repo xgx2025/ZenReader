@@ -201,6 +201,27 @@
 .zen-prose pre code .line {
   display: block;
 }
+/* 代码块「语言」：左上角常驻小签，与右上复制按钮同款浮签；
+   有签的块把顶部内边距垫高，标签不压首行代码。无语言标注的裸块不带签。 */
+.zen-prose pre:has(> .code-lang) {
+  padding-top: 2.4em;
+}
+.zen-prose pre .code-lang {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.7rem;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--dusk);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  user-select: none;
+  pointer-events: none;
+}
 
 /* Mermaid 图卡：与代码块同一纸感容器；图居中，超宽横向滚动。 */
 .zen-prose .mermaid-figure {
