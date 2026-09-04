@@ -106,6 +106,12 @@
   border-left: 3px solid var(--bamboo);
   color: var(--ink-soft);
 }
+/* 引文不留尾：末段的 margin-bottom 会残留在引文块内，与块自身的下边距、
+   内衬叠加，让每处 `>` 末尾都多出近一行空白。末子元素清掉，引文即收在末行。
+   （覆盖上方 [data-indent] 与基础 p 规则中 blockquote 内段的下边距。） */
+.zen-prose blockquote > :last-child {
+  margin-bottom: 0;
+}
 
 .zen-prose ul,
 .zen-prose ol {
