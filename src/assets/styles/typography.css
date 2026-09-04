@@ -223,7 +223,8 @@
   pointer-events: none;
 }
 
-/* Mermaid 图卡：与代码块同一纸感容器；图居中，超宽横向滚动。 */
+/* Mermaid 图卡：与代码块同一纸感容器；图居中，超宽横向滚动。
+   渲染成功的图卡可点开灯箱放大（见 ImageViewer 的 mermaid 分支）。 */
 .zen-prose .mermaid-figure {
   margin: 1.6em 0;
   padding: 1.4em 1.6em;
@@ -234,15 +235,17 @@
   display: flex;
   justify-content: center;
   font-family: var(--font-sans);
+  cursor: zoom-in;
   transition: background-color var(--motion-base) var(--ease-zen);
 }
 .zen-prose .mermaid-figure svg {
   max-width: 100%;
   height: auto;
 }
-/* 渲染失败：退回源码，斜体小注说明缘由。 */
+/* 渲染失败：退回源码，斜体小注说明缘由；不可放大，光标回到文本态。 */
 .zen-prose .mermaid-figure.mermaid-figure-error {
   display: block;
+  cursor: auto;
 }
 .zen-prose .mermaid-figure.mermaid-figure-error code {
   display: block;

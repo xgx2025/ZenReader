@@ -113,3 +113,26 @@ export async function renderMermaidBlocks(
     }),
   )
 }
+
+/**
+ * 灯箱快照：取图卡内 SVG 的可放大副本与宽高比（无图返回 null）。
+ * 有 viewBox 时摘掉 mermaid 写死的 max-width 与 width/height，交给灯箱
+ * 按比例自适应铺满；id 必须原样保留——图内 <style> 以它作作用域锚点。
+ */
+export function mermaidSvgSnapshot(
+  figure: HTMLElement,
+): { html: string; ratio: number } | null {
+  const svg = figure.querySelector('svg')
+  if (!svg) return null
+  const clone = svg.cloneNode(true) as SVGSVGElement
+  const vb = svg.viewBox.baseVal
+  if (vb.width > 0 && vb.height > 0) {
+    clone.removeAttribute('style')
+    clone.removeAttribute('width')
+    clone.removeAttribute('height')
+    return { html: clone.outerHTML, ratio: vb.width / vb.height }
+  }
+  // 兜底：无 viewBox 则原样带走，按当前渲染尺寸折算比例。
+  const box = svg.getBoundingClientRect()
+  return { html: clone.outerHTML, ratio: box.height > 0 ? box.width / box.height : 1 }
+}

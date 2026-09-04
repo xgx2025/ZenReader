@@ -21,7 +21,7 @@ import ShortcutSheet from '@/components/reader/ShortcutSheet.vue'
 
 import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
-import { renderMermaidBlocks } from '@/lib/markdown/mermaid'
+import { renderMermaidBlocks, mermaidSvgSnapshot } from '@/lib/markdown/mermaid'
 import { wireCodeCopy } from '@/lib/markdown/codeCopy'
 import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
@@ -125,6 +125,14 @@ const showBackTop = computed(() => scrollTopPx.value > window.innerHeight * 1.5)
 
 /** 图片灯箱：正文 img 点击后的放大查看。 */
 const viewerSrc = ref<string | null>(null)
+/** mermaid 图灯箱：图卡内 SVG 快照 + 宽高比（mermaidSvgSnapshot 产物）。 */
+const viewerSvg = ref<{ html: string; ratio: number } | null>(null)
+
+/** 收起灯箱：图片与 mermaid 两个分支共用。 */
+function closeViewer() {
+  viewerSrc.value = null
+  viewerSvg.value = null
+}
 
 /** 平滑滚到卷首 / 卷尾（Home / End / 回到卷首共用）。 */
 function scrollToEdge(edge: 'top' | 'bottom') {
@@ -453,7 +461,13 @@ function onProseClick(e: MouseEvent) {
   }
   const anchor = target.closest('a[href]')
   if (!anchor) {
-    // 无链之图：入灯箱静观（带链的图交给链接逻辑）。
+    // 无链之图与 mermaid 图卡：入灯箱静观（带链的图交给链接逻辑）。
+    // 渲染失败的 mermaid 卡（.mermaid-figure-error）是源码，留给选中复制。
+    const fig = target.closest('.mermaid-figure:not(.mermaid-figure-error)')
+    if (fig) {
+      viewerSvg.value = mermaidSvgSnapshot(fig as HTMLElement)
+      return
+    }
     const img = target.closest('img')
     if (img) viewerSrc.value = img.getAttribute('src')
     return
@@ -945,7 +959,7 @@ watch(() => route.params.path, loadDocument)
       </button>
     </Transition>
 
-    <ImageViewer :src="viewerSrc" @close="viewerSrc = null" />
+    <ImageViewer :src="viewerSrc" :svg="viewerSvg" @close="closeViewer" />
 
     <!-- 入定仪式（风格由设置「入定动画」决定，注册表见 zenRituals.ts）：
          墨韵/落叶/香篆各自按契约推进——纱起、各自意象展开，世界退去
