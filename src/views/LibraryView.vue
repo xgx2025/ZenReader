@@ -222,8 +222,18 @@ const cardsToRender = computed<VaultFile[]>(() =>
 const gridClass = computed(() =>
   [
     'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
-    arranging.value ? 'arrange-active' : '',
+    // 整片网格淡入：非拖动排序态每次重挂载播放一次（见下方 key）。
+    arranging.value ? 'arrange-active' : 'grid-arrive',
   ].join(' '),
+)
+
+/**
+ * 网格重挂载钥匙：换分组/进出拖动排序时强制重挂载整片网格，
+ * 让 .grid-arrive 从头播放、并让旧组卡片即刻退场（不再拖沓半秒）。
+ * 不掺入搜索词——寻词过程要保持即时、逐键不闪动。
+ */
+const gridKey = computed(() =>
+  arranging.value ? 'arrange' : `folder:${library.selectedFolder || '__root__'}`,
 )
 
 const { drag, onPick, cancelDrag } = useCardArrange({
@@ -577,6 +587,7 @@ onBeforeUnmount(() => {
 
         <TransitionGroup
           v-else
+          :key="gridKey"
           tag="div"
           name="arrange"
           :class="gridClass"
@@ -586,7 +597,6 @@ onBeforeUnmount(() => {
             :key="f.relativePath"
             :file="f"
             :meta="library.index[f.relativePath]"
-            :index="i"
             :query="library.search"
             :arrange="arranging"
             :slot="arranging && drag?.started && drag.path === f.relativePath"

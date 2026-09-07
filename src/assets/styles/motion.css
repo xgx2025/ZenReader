@@ -33,21 +33,20 @@
   animation: zen-breathe 4s var(--ease-zen) infinite;
 }
 
-/* 卡片入场：徐徐上浮，一次即止；配合 stagger delay 形成"徐徐展开"的节奏。
-   fill-mode 用 backwards（而非 both）：入场只在延迟期隐形、播毕即放行内联
-   transform，避免残留的动画 transform 压死后续拖动排序的 FLIP 让位。 */
-@keyframes card-rise {
+/* 书库整片网格淡入：换分组/首次展卷时整体轻缓浮现一次（而非逐卡错峰上浮）。
+   逐卡入场会让"文字一直切换"且旧卡因卡上常驻动画声明而拖沓离场，故把入场
+   收敛到网格这一层：透明度淡入、不动 transform，不干扰拖动排序的 FLIP 让位。
+   元素随分组切换被重挂载时才播放（见 LibraryView 对 TransitionGroup 的 key）。 */
+@keyframes grid-arrive {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
-.card-rise {
-  animation: card-rise 420ms var(--ease-zen) backwards;
+.grid-arrive {
+  animation: grid-arrive 180ms var(--ease-zen) both;
 }
 
 /* 燃香：火光明灭有息，香将尽时转急。 */

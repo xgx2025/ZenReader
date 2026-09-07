@@ -14,7 +14,6 @@ const props = withDefaults(
   defineProps<{
     file: VaultFile
     meta?: IndexedMeta
-    index?: number
     /** 当前书库搜索词：全文命中时在卡片上展示上下文片段。 */
     query?: string
     /** 拖动排序态：整卡非导航、可被拿起；隐藏「⋯」与右键菜单。 */
@@ -26,7 +25,7 @@ const props = withDefaults(
     /** 右上角小标（序号「3」或「新」）；仅拖动排序/克隆非空。 */
     badge?: string
   }>(),
-  { index: 0, query: '', arrange: false, slot: false, clone: false, badge: '' },
+  { query: '', arrange: false, slot: false, clone: false, badge: '' },
 )
 
 const emit = defineEmits<{
@@ -84,18 +83,15 @@ const linkTo = computed(() =>
   arranging.value ? undefined : `/read/${encodeURIComponent(props.file.relativePath)}`,
 )
 
-/** 入场 stagger：仅普通态施加；拖动排序态去掉以免与 FLIP/克隆动画互扰。 */
-const riseDelay = computed(() =>
-  arranging.value ? undefined : `${Math.min(props.index * 45, 360)}ms`,
-)
-const riseAnim = computed(() => (arranging.value ? undefined : 'card-rise'))
-
+/**
+ * 形态修饰类：占位格留虚线空位、浮动克隆不参与 hover。
+ * 入场动画已上移为「整片网格淡入」（LibraryView 的 .grid-arrive），卡片本身
+ * 不再逐张上浮——也避免卡上常驻动画声明令 TransitionGroup 离场拖沓半秒。
+ */
 const rootClass = computed(() => {
-  const c = ['group relative flex min-w-0']
-  if (props.slot) c.push('arrange-slot')
-  else if (props.clone) c.push('arrange-clone')
-  else c.push(riseAnim.value ?? '')
-  return c.join(' ')
+  if (props.slot) return 'arrange-slot'
+  if (props.clone) return 'arrange-clone'
+  return ''
 })
 
 function onSurfacePointerDown(e: PointerEvent) {
@@ -126,7 +122,6 @@ const isNewBadge = computed(
   <div
     class="group relative flex min-w-0"
     :class="rootClass"
-    :style="{ animationDelay: riseDelay }"
     @contextmenu.prevent="onContextMenu"
   >
     <component
