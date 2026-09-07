@@ -672,9 +672,12 @@ watch(() => route.params.path, loadDocument)
 
     <!-- Top toolbar (hidden in 禅境; tucks away while scrolling down) -->
     <Transition name="zen-header">
+      <!-- z-20：backdrop-blur 令本栏自成层叠上下文，若无 z 则与后面的阅读区同为 0 层、
+           阅读区按 DOM 序盖在其上——香浮层即使 z-50 也逃不出本栏，点击全被透明阅读区接走。
+           给本栏一个 z-index 让整棵子树（含下拉浮层）抬到阅读区之上。 -->
       <header
         v-if="!settings.zenMode || ritualStage < 1"
-        class="header-fade relative flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        class="header-fade relative z-20 flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
         :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
       >
         <div class="flex min-w-0 items-center gap-1">
