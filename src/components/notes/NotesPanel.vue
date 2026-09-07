@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import NoteMarkdown from '@/components/notes/NoteMarkdown.vue'
 import { COPY } from '@/lib/copy'
 import type { Note } from '@/types/note'
 
@@ -12,6 +13,8 @@ const emit = defineEmits<{
   select: [id: string]
   edit: [id: string]
   create: []
+  zoomImage: [src: string]
+  zoomFigure: [svg: { html: string; ratio: number }]
 }>()
 
 const listEl = ref<HTMLElement | null>(null)
@@ -96,9 +99,13 @@ watch(
         >
           {{ COPY.freeNote }}
         </span>
-        <p v-if="n.note" class="mt-2 text-sm leading-relaxed text-ink">
-          {{ n.note }}
-        </p>
+        <NoteMarkdown
+          v-if="n.note"
+          :source="n.note"
+          class="mt-2"
+          @zoom-image="emit('zoomImage', $event)"
+          @zoom-figure="emit('zoomFigure', $event)"
+        />
         <div class="mt-2 flex items-center gap-3">
           <button
             class="inline-flex items-center gap-1 text-xs text-dusk transition-colors hover:text-bamboo"

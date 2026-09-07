@@ -106,6 +106,12 @@
   border-left: 3px solid var(--bamboo);
   color: var(--ink-soft);
 }
+/* 引文不留尾：末段的 margin-bottom 会残留在引文块内，与块自身的下边距、
+   内衬叠加，让每处 `>` 末尾都多出近一行空白。末子元素清掉，引文即收在末行。
+   （覆盖上方 [data-indent] 与基础 p 规则中 blockquote 内段的下边距。） */
+.zen-prose blockquote > :last-child {
+  margin-bottom: 0;
+}
 
 .zen-prose ul,
 .zen-prose ol {
@@ -223,7 +229,8 @@
   pointer-events: none;
 }
 
-/* Mermaid 图卡：与代码块同一纸感容器；图居中，超宽横向滚动。 */
+/* Mermaid 图卡：与代码块同一纸感容器；图居中，超宽横向滚动。
+   渲染成功的图卡可点开灯箱放大（见 ImageViewer 的 mermaid 分支）。 */
 .zen-prose .mermaid-figure {
   margin: 1.6em 0;
   padding: 1.4em 1.6em;
@@ -234,15 +241,17 @@
   display: flex;
   justify-content: center;
   font-family: var(--font-sans);
+  cursor: zoom-in;
   transition: background-color var(--motion-base) var(--ease-zen);
 }
 .zen-prose .mermaid-figure svg {
   max-width: 100%;
   height: auto;
 }
-/* 渲染失败：退回源码，斜体小注说明缘由。 */
+/* 渲染失败：退回源码，斜体小注说明缘由；不可放大，光标回到文本态。 */
 .zen-prose .mermaid-figure.mermaid-figure-error {
   display: block;
+  cursor: auto;
 }
 .zen-prose .mermaid-figure.mermaid-figure-error code {
   display: block;
@@ -351,4 +360,82 @@
 .zen-prose mark.hl:hover,
 .zen-prose mark.hl.active {
   background: color-mix(in srgb, var(--sandal) 38%, transparent);
+}
+
+/* .note-prose — 觉悟笔记卡内的 zen-prose：同一套纸墨排印，密度收进侧栏
+   卡片。承袭 .zen-prose 全部元素样式，只把字号、标题与块距收拢成卡片
+   尺度；两类特异度相同，故定义在 .zen-prose 之后、以后者为准。 */
+.note-prose {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  max-width: none;
+}
+.note-prose > :last-child {
+  margin-bottom: 0;
+}
+/* 卡片尺度的标题：层级收敛到 1em–1.2em，靠字重立层级而非字号。 */
+.note-prose h1,
+.note-prose h2,
+.note-prose h3,
+.note-prose h4,
+.note-prose h5,
+.note-prose h6 {
+  margin: 1.3em 0 0.55em;
+  line-height: 1.5;
+}
+.note-prose h1 {
+  font-size: 1.2em;
+  margin-top: 0;
+}
+.note-prose h2 {
+  font-size: 1.1em;
+}
+.note-prose h3,
+.note-prose h4,
+.note-prose h5,
+.note-prose h6 {
+  font-size: 1em;
+}
+.note-prose p {
+  margin-bottom: 0.9em;
+}
+.note-prose ul,
+.note-prose ol {
+  margin-bottom: 0.9em;
+  padding-left: 1.5em;
+}
+.note-prose li {
+  margin: 0.25em 0;
+}
+.note-prose blockquote {
+  margin: 0.8em 0;
+}
+.note-prose pre {
+  margin: 0.8em 0;
+  padding: 0.85em 1em;
+}
+.note-prose table {
+  margin: 0.8em 0;
+  font-size: 0.92em;
+}
+.note-prose th,
+.note-prose td {
+  padding: 0.35em 0.6em;
+}
+.note-prose img {
+  margin: 0.8em auto;
+}
+.note-prose .mermaid-figure {
+  margin: 0.8em 0;
+  padding: 1em 1.1em;
+}
+.note-prose .zen-math-block {
+  margin: 0.4em 0 0.9em;
+}
+.note-prose hr {
+  margin: 1.5em 0;
+}
+.note-prose .footnotes {
+  margin-top: 1.5em;
+  padding-top: 1em;
 }
