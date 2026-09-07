@@ -31,6 +31,10 @@ const WIDTH: Record<'xs' | 'sm' | 'md', string> = {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
+    // 灯箱（z-70）浮在弹窗之上且自会拦下 Esc：此处让位，Esc 先收灯箱，
+    // 弹窗待下一击再退，保住「层层退返」。（灯箱根节点随 v-if 卸载，
+    // querySelector 探得到即是在开。）
+    if (document.querySelector('.img-viewer')) return
     // 捕获阶段截停，避免冒泡到阅读器的层级式 Esc 处理。
     e.stopPropagation()
     emit('close')

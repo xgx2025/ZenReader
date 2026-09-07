@@ -863,6 +863,8 @@ watch(() => route.params.path, loadDocument)
             @edit="onEditNote"
             @delete="onRequestDelete"
             @create="onNewFreeNote"
+            @zoom-image="viewerSrc = $event"
+            @zoom-figure="viewerSvg = $event"
           />
         </aside>
       </Transition>

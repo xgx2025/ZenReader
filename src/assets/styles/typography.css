@@ -361,3 +361,81 @@
 .zen-prose mark.hl.active {
   background: color-mix(in srgb, var(--sandal) 38%, transparent);
 }
+
+/* .note-prose — 觉悟笔记卡内的 zen-prose：同一套纸墨排印，密度收进侧栏
+   卡片。承袭 .zen-prose 全部元素样式，只把字号、标题与块距收拢成卡片
+   尺度；两类特异度相同，故定义在 .zen-prose 之后、以后者为准。 */
+.note-prose {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  max-width: none;
+}
+.note-prose > :last-child {
+  margin-bottom: 0;
+}
+/* 卡片尺度的标题：层级收敛到 1em–1.2em，靠字重立层级而非字号。 */
+.note-prose h1,
+.note-prose h2,
+.note-prose h3,
+.note-prose h4,
+.note-prose h5,
+.note-prose h6 {
+  margin: 1.3em 0 0.55em;
+  line-height: 1.5;
+}
+.note-prose h1 {
+  font-size: 1.2em;
+  margin-top: 0;
+}
+.note-prose h2 {
+  font-size: 1.1em;
+}
+.note-prose h3,
+.note-prose h4,
+.note-prose h5,
+.note-prose h6 {
+  font-size: 1em;
+}
+.note-prose p {
+  margin-bottom: 0.9em;
+}
+.note-prose ul,
+.note-prose ol {
+  margin-bottom: 0.9em;
+  padding-left: 1.5em;
+}
+.note-prose li {
+  margin: 0.25em 0;
+}
+.note-prose blockquote {
+  margin: 0.8em 0;
+}
+.note-prose pre {
+  margin: 0.8em 0;
+  padding: 0.85em 1em;
+}
+.note-prose table {
+  margin: 0.8em 0;
+  font-size: 0.92em;
+}
+.note-prose th,
+.note-prose td {
+  padding: 0.35em 0.6em;
+}
+.note-prose img {
+  margin: 0.8em auto;
+}
+.note-prose .mermaid-figure {
+  margin: 0.8em 0;
+  padding: 1em 1.1em;
+}
+.note-prose .zen-math-block {
+  margin: 0.4em 0 0.9em;
+}
+.note-prose hr {
+  margin: 1.5em 0;
+}
+.note-prose .footnotes {
+  margin-top: 1.5em;
+  padding-top: 1em;
+}
