@@ -33,6 +33,7 @@ export type IconName =
   | 'chevron-down'
   | 'about'
   | 'library'
+  | 'grip'
 
 const props = withDefaults(
   defineProps<{ name: IconName; size?: number; strokeWidth?: number }>(),
@@ -81,6 +82,8 @@ const ICONS: Record<IconName, string> = {
     '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01"/><path d="M10 9h.01"/><path d="M14 9h.01"/><path d="M18 9h.01"/><path d="M6 13h.01"/><path d="M10 13h.01"/><path d="M14 13h.01"/><path d="M18 13h.01"/><path d="M8 16h8"/>',
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
   about: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 11v5"/>',
+  // 拖拽手柄：六枚实心小点（同 more 画法）。
+  grip: '<circle cx="8" cy="6" r="1.25" fill="currentColor"/><circle cx="16" cy="6" r="1.25" fill="currentColor"/><circle cx="8" cy="12" r="1.25" fill="currentColor"/><circle cx="16" cy="12" r="1.25" fill="currentColor"/><circle cx="8" cy="18" r="1.25" fill="currentColor"/><circle cx="16" cy="18" r="1.25" fill="currentColor"/>',
   // 实底书架（书库根行专用）：1024 视箱的填充图形，逐 path 覆盖
   // svg 级的 fill=none/stroke 默认，视箱见 ICON_VIEWBOX。
   library:

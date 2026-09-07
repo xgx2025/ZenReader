@@ -24,6 +24,7 @@ export interface DropImportResult {
 export function useVaultDrop(
   getTargetFolder: () => string,
   onResult: (r: DropImportResult) => void,
+  enabled?: () => boolean,
 ) {
   const settings = useSettingsStore()
   const library = useLibraryStore()
@@ -38,6 +39,7 @@ export function useVaultDrop(
       notify(COPY.vaultNotOpen, 'sandal')
       return
     }
+    if (enabled && !enabled()) return // 拖动排序等态下暂不受卷
     if (importing.value) return
     importing.value = true
     run()
