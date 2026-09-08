@@ -27,7 +27,9 @@ function basename(relativePath: string): string {
  * 1. rename 启发——消失/出现各 1 条且 basename 相同（覆盖"移到分组"这类库内移动），
  *    旧路径原位替换成新路径，不视为新卷、不立最前；
  * 2. 剪除已消失路径；
- * 3. 剩余新到卷按 mtime 升序逐条 unshift——最终最"新"者排在序列最前。
+ * 3. 余下的"真新卷"（此前未见、也未被旧序载着，按 mtime 升序逐条 unshift——
+ *    最终最"新"者排在序列最前）。已持久化序列里的文件不算新到，因此应用重启后的
+ *    首次 refresh（内存 prevPaths 为空）能把磁盘序原样取回，而不会复制出重复项。
  */
 export function reconcileCustomOrder(
   prevCustom: string[],
@@ -36,7 +38,14 @@ export function reconcileCustomOrder(
 ): ReconcileResult {
   const nextPaths = new Set(nextFiles.map((f) => f.relativePath))
 
-  const appeared = nextFiles.filter((f) => !prevPaths.has(f.relativePath))
+  // 仅"此前未见、也未被旧序载着"的才算新卷。不能只看 prevPaths——应用重启后首次 refresh
+  // 时内存 prevPaths 为空、所有文件都"出现"，若把已持久化的整条序列再立到最前，会让
+  // customOrder 出现重复项：展示靠末次出现的位置兜底看似正常，但随后首次 drop 的 merge
+  // 会撞上前面那批副本，导致一次有效排布在视觉上失效，且重复项还会随每次重启越积越多。
+  const prevCustomSet = new Set(prevCustom)
+  const appeared = nextFiles.filter(
+    (f) => !prevPaths.has(f.relativePath) && !prevCustomSet.has(f.relativePath),
+  )
 
   if (prevCustom.length > 0) {
     const disappeared = [...prevPaths].filter((p) => !nextPaths.has(p))

@@ -90,6 +90,32 @@ describe('reconcileCustomOrder · 序列对齐与"新卷立于最前"', () => {
     expect(r.order).toEqual(['b.md', 'a.md'])
     expect(r.arrivals).toEqual(['a.md', 'b.md'])
   })
+
+  it('重启后首次 refresh（prevPaths 空）：磁盘序原样取回，不复制出重复项', () => {
+    // 模拟持久化恢复：prevCustom 已载着全部活文件，而内存刚起、prevPaths 为空。
+    const prev = ['c.md', 'a.md', 'b.md'] // 自定义序（不按 mtime，刻意非默认）
+    const next = files([
+      ['c.md', 5],
+      ['a.md', 1],
+      ['b.md', 3],
+    ])
+    const r = reconcileCustomOrder(prev, next, new Set())
+    expect(r.order).toEqual(['c.md', 'a.md', 'b.md'])
+    expect(r.arrivals).toEqual([])
+    expect(new Set(r.order).size).toBe(r.order.length) // 无重复
+  })
+
+  it('磁盘序没盖住重启后外部新增：只把真新卷立最前', () => {
+    const prev = ['a.md', 'b.md']
+    const next = files([
+      ['b.md', 5],
+      ['a.md', 4],
+      ['c.md', 9], // 应用关闭期间由别处新增
+    ])
+    const r = reconcileCustomOrder(prev, next, new Set())
+    expect(r.order).toEqual(['c.md', 'a.md', 'b.md'])
+    expect(r.arrivals).toEqual(['c.md'])
+  })
 })
 
 describe('mergeVisibleMove · 过滤视图位移合并回全库', () => {

@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { nativeFs } from '@/lib/native'
@@ -114,7 +114,7 @@ export const useLibraryStore = defineStore('library', () => {
 
   wireArrangeFlush()
 
-  /** 本次会话已 hydrate 的 vaultPath（守卫：路径未变不重复读盘）。 */
+  /** 本次会话已 hydrate 的 vaultPath（守卫：同库反复 refresh 不重复读盘）。 */
   let hydrateKey = ''
 
   function arrangePayload(): ArrangePersisted | null {
@@ -133,24 +133,13 @@ export const useLibraryStore = defineStore('library', () => {
     if (p) scheduleSaveArrange(p)
   }
 
-  /** 打开/更换书库时载入该库自定义序；清库/换库不匹配则干净默认。 */
-  function hydrateArrange(path: string): void {
-    if (path === hydrateKey) return
-    hydrateKey = path
+  /** 把拖动排序态重置为干净默认（清库 / 读库失败时）。 */
+  function resetArrange(): void {
+    customOrder.value = []
+    arranged.value = false
+    sortPreference.value = 'auto'
     latestArrivals.value = []
-    if (!path) {
-      customOrder.value = []
-      arranged.value = false
-      sortPreference.value = 'auto'
-      return
-    }
-    const p = loadArrange(path)
-    customOrder.value = p?.customOrder ?? []
-    arranged.value = p?.arranged ?? false
-    sortPreference.value = p?.sortPreference ?? 'auto'
   }
-
-  watch(() => settings.vaultPath, hydrateArrange, { immediate: true })
 
   let indexGen = 0
 
@@ -214,15 +203,26 @@ export const useLibraryStore = defineStore('library', () => {
       files.value = []
       dirs.value = []
       index.value = {}
-      customOrder.value = []
-      arranged.value = false
-      sortPreference.value = 'auto'
-      latestArrivals.value = []
+      resetArrange()
+      hydrateKey = '' // 清库后重开同一库也要重新读盘，不能沿用内存残留
       return
     }
     loading.value = true
+    const path = settings.vaultPath
     try {
-      const listing = await nativeFs.readVault(settings.vaultPath)
+      const listing = await nativeFs.readVault(path)
+      if (settings.vaultPath !== path) return // 读盘期间已换库/清库：丢弃这次结果
+      // 首次开库：从 .zenreader/arrange.json 载入该库自定义序（浏览器 dev 退化读
+      // localStorage）。此后同库反复 refresh 沿用内存态——文件只是重启后的入口，
+      // 刷新途中不重复读盘，也不让旧文件盖掉刚排好还没落盘的新序。
+      if (hydrateKey !== path) {
+        hydrateKey = path
+        const p = await loadArrange(path)
+        if (settings.vaultPath !== path) return // 载序期间换库：等新库自己的 refresh
+        customOrder.value = p?.customOrder ?? []
+        arranged.value = p?.arranged ?? false
+        sortPreference.value = p?.sortPreference ?? 'auto'
+      }
       const prevPaths = new Set(files.value.map((f) => f.relativePath))
       files.value = listing.files
       dirs.value = listing.dirs
@@ -246,6 +246,8 @@ export const useLibraryStore = defineStore('library', () => {
       console.error('[zenreader] read_vault failed', e)
       files.value = []
       dirs.value = []
+      resetArrange()
+      hydrateKey = '' // 重试时重新读盘，不沿用残缺内存态
       // 读库失败不再静默成「尚无书籍」，轻声告知用户原因。
       useToast().notify(COPY.vaultReadFailed, 'sandal')
     } finally {
