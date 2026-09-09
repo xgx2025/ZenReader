@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
 import { folderPathFromRelative, titleFromName } from '@/lib/vault'
@@ -13,14 +14,25 @@ const props = withDefaults(
   defineProps<{
     file: VaultFile
     meta?: IndexedMeta
-    index?: number
     /** 当前书库搜索词：全文命中时在卡片上展示上下文片段。 */
     query?: string
+    /** 拖动排序态：整卡非导航、可被拿起；隐藏「⋯」与右键菜单。 */
+    arrange?: boolean
+    /** 拖动排序占位格：被拿起卷的"原位"，内容隐藏、留虚线空位。 */
+    slot?: boolean
+    /** 浮动克隆（Teleport 内展示）：禁导航/hover/入场动画。 */
+    clone?: boolean
+    /** 右上角小标（序号「3」或「新」）；仅拖动排序/克隆非空。 */
+    badge?: string
   }>(),
-  { index: 0, query: '' },
+  { query: '', arrange: false, slot: false, clone: false, badge: '' },
 )
 
-const emit = defineEmits<{ menu: [file: VaultFile, x: number, y: number] }>()
+const emit = defineEmits<{
+  menu: [file: VaultFile, x: number, y: number]
+  /** 拖动排序中"拿起"一张卷：事件源卡已 setPointerCapture。 */
+  pick: [payload: { path: string; event: PointerEvent; el: HTMLElement }]
+}>()
 
 const progressStore = useProgressStore()
 
@@ -60,19 +72,66 @@ const hit = computed(() => {
   }
 })
 
-/** 入场 stagger：逐张上浮，长列表封顶不等待。 */
-const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
+// —— 拖动排序相关形态 ——
+const arranging = computed(() => props.arrange || props.slot || props.clone)
+/** 拖动排序中"可被拿起"的真身卡（占位/克隆不参与）。 */
+const pickable = computed(() => props.arrange && !props.slot && !props.clone)
+/** 表面元素：非拖动排序用 RouterLink（点击开卷）；拖动排序/占位/克隆改用 div。 */
+const surface = computed(() => (arranging.value ? 'div' : RouterLink))
+/** 仅在普通态给 RouterLink 路由。 */
+const linkTo = computed(() =>
+  arranging.value ? undefined : `/read/${encodeURIComponent(props.file.relativePath)}`,
+)
+
+/**
+ * 形态修饰类：占位格留虚线空位、浮动克隆不参与 hover。
+ * 入场动画已上移为「整片网格淡入」（LibraryView 的 .grid-arrive），卡片本身
+ * 不再逐张上浮——也避免卡上常驻动画声明令 TransitionGroup 离场拖沓半秒。
+ */
+const rootClass = computed(() => {
+  if (props.slot) return 'arrange-slot'
+  if (props.clone) return 'arrange-clone'
+  return ''
+})
+
+function onSurfacePointerDown(e: PointerEvent) {
+  if (!pickable.value || e.button !== 0) return
+  e.preventDefault()
+  const el = e.currentTarget as HTMLElement
+  el.setPointerCapture?.(e.pointerId)
+  emit('pick', { path: props.file.relativePath, event: e, el })
+}
+
+function onContextMenu(e: MouseEvent) {
+  if (arranging.value) return // 拖动排序中不再唤菜单
+  emit('menu', props.file, e.clientX, e.clientY)
+}
+
+function onMore(e: MouseEvent) {
+  if (arranging.value) return
+  emit('menu', props.file, e.clientX, e.clientY)
+}
+
+/** 右上角小标：序号淡灰；「新」卷用竹色。 */
+const isNewBadge = computed(
+  () => !!props.badge && props.badge === COPY.newBadge && props.arrange,
+)
 </script>
 
 <template>
   <div
-    class="card-rise group relative flex min-w-0"
-    :style="{ animationDelay: riseDelay }"
-    @contextmenu.prevent="emit('menu', file, $event.clientX, $event.clientY)"
+    class="group relative flex min-w-0"
+    :class="rootClass"
+    @contextmenu.prevent="onContextMenu"
   >
-    <RouterLink
-      :to="`/read/${encodeURIComponent(file.relativePath)}`"
+    <component
+      :is="surface"
+      :to="linkTo"
       class="flex min-w-0 flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
+      :role="arranging ? 'button' : undefined"
+      :tabindex="pickable ? 0 : undefined"
+      :aria-label="pickable ? title : undefined"
+      @pointerdown="onSurfacePointerDown"
     >
       <div class="flex items-start justify-between gap-2">
         <h3 class="min-h-[2lh] font-serif font-bold text-lg leading-snug text-ink line-clamp-2">
@@ -126,12 +185,22 @@ const riseDelay = computed(() => `${Math.min(props.index * 45, 360)}ms`)
           <span v-if="mtime" class="ml-auto shrink-0">{{ mtime }}</span>
         </div>
       </div>
-    </RouterLink>
+    </component>
+
+    <!-- 拖动排序右上角：序号 / 「新」小标（占位与克隆不标）。 -->
+    <span
+      v-if="props.arrange && !props.slot && !props.clone && badge"
+      class="absolute right-2 top-2 flex h-8 min-w-8 items-center justify-center rounded-full px-2 font-mono text-[13px] leading-none"
+      :class="isNewBadge ? 'bg-bamboo/15 text-bamboo' : 'bg-paper-deep/70 text-dusk'"
+    >
+      {{ badge }}
+    </span>
 
     <button
+      v-if="!arranging"
       class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full text-ink-soft opacity-0 transition-opacity duration-200 hover:bg-bamboo/10 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
       :title="COPY.moreActions"
-      @click.prevent.stop="emit('menu', file, $event.clientX, $event.clientY)"
+      @click.prevent.stop="onMore"
     >
       <ZIcon name="more" :size="16" />
     </button>

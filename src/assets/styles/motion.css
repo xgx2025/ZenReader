@@ -33,19 +33,20 @@
   animation: zen-breathe 4s var(--ease-zen) infinite;
 }
 
-/* 卡片入场：徐徐上浮，一次即止；配合 stagger delay 形成"徐徐展开"的节奏。 */
-@keyframes card-rise {
+/* 书库整片网格淡入：换分组/首次展卷时整体轻缓浮现一次（而非逐卡错峰上浮）。
+   逐卡入场会让"文字一直切换"且旧卡因卡上常驻动画声明而拖沓离场，故把入场
+   收敛到网格这一层：透明度淡入、不动 transform，不干扰拖动排序的 FLIP 让位。
+   元素随分组切换被重挂载时才播放（见 LibraryView 对 TransitionGroup 的 key）。 */
+@keyframes grid-arrive {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
-.card-rise {
-  animation: card-rise 420ms var(--ease-zen) both;
+.grid-arrive {
+  animation: grid-arrive 180ms var(--ease-zen) both;
 }
 
 /* 燃香：火光明灭有息，香将尽时转急。 */
@@ -691,4 +692,41 @@
 }
 .zen-arrive {
   animation: zen-arrive 0.9s var(--ease-zen) 0.55s both;
+}
+
+/* ── 拖动排序（手动排布）────────────────────────────────────────────── */
+
+/* 让位：TransitionGroup 给被重排的卡内联 transform，由这里接管缓移。 */
+.arrange-move {
+  transition: transform 420ms var(--ease-zen);
+}
+
+/* 被拿起卷的原位：虚位以待。内容整体隐去（visibility 保布局、不触
+   FLIP 几何），根盒留一圈竹色虚线与淡底，暗示"此位待卷"。 */
+.arrange-slot {
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--paper-deep) 28%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--bamboo) 42%, transparent);
+  outline-offset: -2px;
+}
+.arrange-slot > * {
+  visibility: hidden;
+}
+
+/* 拖起的克隆：无入场上浮、不参与 grid，尺寸与源卡一致。 */
+.arrange-clone {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 浮动克隆的"纸卷离架"投影：整卡剪影下投一团柔影，像刚被提起。
+   （rgba 黑色同全局 --shadow-zen-*，暗色主题下不致泛光。） */
+.arrange-ghost {
+  filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.18));
+}
+
+/* 拖动排序拖拽进行中，全窗指针呈握起态。 */
+.arrange-drag-active,
+.arrange-drag-active * {
+  cursor: grabbing !important;
 }

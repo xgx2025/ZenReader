@@ -19,7 +19,11 @@ import InsightComposer from '@/components/notes/InsightComposer.vue'
 import NotesPanel from '@/components/notes/NotesPanel.vue'
 import ShortcutSheet from '@/components/reader/ShortcutSheet.vue'
 
-import { applyAnchors, type AppliedAnchor } from '@/lib/anchor/textAnchor'
+import {
+  applyAnchors,
+  locateQuoteOffset,
+  type AppliedAnchor,
+} from '@/lib/anchor/textAnchor'
 import { highlightCodeBlocks } from '@/lib/markdown/highlight'
 import { renderMermaidBlocks, mermaidSvgSnapshot } from '@/lib/markdown/mermaid'
 import { wireCodeCopy } from '@/lib/markdown/codeCopy'
@@ -57,6 +61,8 @@ const { openPanel } = useSettingsPanel()
 const { isFullscreen, toggle: toggleFullscreen, setZen } = useFullscreen()
 
 const proseEl = ref<HTMLElement | null>(null)
+/** 正文纯文本快照（innerHTML 落定后即取）：供笔记按引文原文先后排序，与高亮定位同源。 */
+const proseText = ref('')
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
 const { notify } = useToast()
 
@@ -145,6 +151,33 @@ const anchors = computed<AppliedAnchor[]>(() =>
     .filter((n): n is Note & { anchor: HighlightAnchor } => n.anchor !== null)
     .map((n) => ({ noteId: n.id, anchor: n.anchor })),
 )
+
+/** 该笔记引文在正文中的起始偏移；自由笔记（无引文）或定位失败 → -1。 */
+function noteDocOffset(n: Note): number {
+  const text = proseText.value
+  if (!text || !n.anchor) return -1
+  return locateQuoteOffset(text, n.anchor)
+}
+
+/**
+ * 笔记面板按引用文本在原文中的先后排列：能定位到引文的按偏移升序在前；自由笔记与
+ * 引文已漂移的垫底、按创建先后。同偏移（如同段连选多笔）以创建先后并列，稳定有序。
+ */
+const orderedNotes = computed<Note[]>(() => {
+  const list = notesStore.notes.slice()
+  const group = (p: number) => (p >= 0 ? 0 : 1)
+  list.sort((a, b) => {
+    const pa = noteDocOffset(a)
+    const pb = noteDocOffset(b)
+    const ga = group(pa)
+    const gb = group(pb)
+    if (ga !== gb) return ga - gb
+    const byTime =
+      a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
+    return pa >= 0 && pb >= 0 ? pa - pb || byTime : byTime
+  })
+  return list
+})
 
 const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
 
@@ -261,6 +294,9 @@ function renderProse() {
   const el = proseEl.value
   if (!el || !doc.value) return
   el.innerHTML = doc.value.html
+  // 先于 applyAnchors / mermaid / 高亮取纯文本：引文定位与排序共用同一份"原文"，
+  // 后续把代码块换成图卡等改写 DOM 也不会扰动坐标。
+  proseText.value = el.textContent ?? ''
   applyAnchors(el, anchors.value)
   // mermaid 先行把 `language-mermaid` 块替换为图卡，shiki 便不会再碰它们。
   renderMermaidBlocks(el, settings.theme)
@@ -672,9 +708,12 @@ watch(() => route.params.path, loadDocument)
 
     <!-- Top toolbar (hidden in 禅境; tucks away while scrolling down) -->
     <Transition name="zen-header">
+      <!-- z-20：backdrop-blur 令本栏自成层叠上下文，若无 z 则与后面的阅读区同为 0 层、
+           阅读区按 DOM 序盖在其上——香浮层即使 z-50 也逃不出本栏，点击全被透明阅读区接走。
+           给本栏一个 z-index 让整棵子树（含下拉浮层）抬到阅读区之上。 -->
       <header
         v-if="!settings.zenMode || ritualStage < 1"
-        class="header-fade relative flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        class="header-fade relative z-20 flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
         :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
       >
         <div class="flex min-w-0 items-center gap-1">
@@ -856,7 +895,7 @@ watch(() => route.params.path, loadDocument)
           class="w-80 shrink-0 border-l border-line"
         >
           <NotesPanel
-            :notes="notesStore.notes"
+            :notes="orderedNotes"
             :active-id="activeNoteId"
             @close="showNotes = false"
             @select="onSelectNote"

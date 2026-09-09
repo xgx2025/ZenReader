@@ -128,6 +128,18 @@ export const COPY = {
   moveToRoot: '根目录',
   moreActions: '更多操作',
 
+  // 拖动排序（手动排布书库顺序）
+  sortHand: '自定义',
+  arrange: '拖动排序',
+  arrangeHint: '提起纸卷 · 余卷让位',
+  arrangeEscHint: '按 Esc 或「完成」定序而返',
+  arrangeFinish: '完成',
+  arrangeDone: '拖动排序已成 · 以此为序',
+  arrangeQuitNoChange: '拖动排序已退 · 仍循旧序',
+  arrangeNeedTwo: '卷少，尚无需拖动排序',
+  arrangeNewArrived: '新卷立于最前 · 可再提起归位',
+  newBadge: '新',
+
   // 禅钟（歇息提醒）
   zenClock: '禅钟',
   reminderEnable: '开启',

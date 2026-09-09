@@ -137,13 +137,24 @@ export function applyAnchors(
 ): void {
   const fullText = container.textContent ?? ''
   for (const { noteId, anchor } of anchors) {
-    let start = findNthOccurrence(fullText, anchor.quote, anchor.occurrence)
-    if (start === -1) {
-      start = findBestOccurrence(fullText, anchor)
-    }
+    const start = locateQuoteOffset(fullText, anchor)
     if (start === -1) continue // drift too far — skip rather than mis-highlight
     wrapText(container, start, start + anchor.quote.length, noteId)
   }
+}
+
+/**
+ * 引文在整篇文本中的起始偏移；找不到 → -1。命中规则与 applyAnchors 完全一致
+ * （先按 occurrence 取同名第 n 次出现，落空再按前后文重叠度找最相似处）——排序与
+ * 高亮定位同源，笔记面板按"引用文本在原文中的先后"排列时才不会和实际高亮对不上。
+ */
+export function locateQuoteOffset(
+  fullText: string,
+  anchor: HighlightAnchor,
+): number {
+  let start = findNthOccurrence(fullText, anchor.quote, anchor.occurrence)
+  if (start === -1) start = findBestOccurrence(fullText, anchor)
+  return start
 }
 
 function wrapText(

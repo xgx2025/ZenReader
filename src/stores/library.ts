@@ -11,9 +11,20 @@ import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
+import { customRank, mergeVisibleMove, reconcileCustomOrder } from '@/lib/arrange'
+import {
+  flushArrange,
+  loadArrange,
+  scheduleSaveArrange,
+  wireArrangeFlush,
+} from '@/lib/arrangeStorage'
+import {
+  resolveDisplayMode,
+  type ArrangePersisted,
+  type ArrangeSortMode,
+  type DisplayMode,
+} from '@/types/arrange'
 import type { VaultFile, FolderNode } from '@/types/document'
-
-type SortKey = 'modified' | 'title'
 
 /** Progressive-index metadata for a single file, filled in lazily. */
 export interface IndexedMeta {
@@ -87,8 +98,48 @@ export const useLibraryStore = defineStore('library', () => {
   const index = ref<Record<string, IndexedMeta>>({})
   const search = ref('')
   const selectedFolder = ref('')
-  const sortBy = ref<SortKey>('modified')
   const loading = ref(false)
+
+  // —— 拖动排序（手动排布）：展示顺序的状态 + 持久化接线 ——
+  const customOrder = ref<string[]>([])
+  const arranged = ref(false)
+  const sortPreference = ref<ArrangeSortMode>('auto')
+  /** 最近一次 refresh 到达的新卷（拖动排序中供淡「新」标；refresh 即刷新）。 */
+  const latestArrivals = ref<string[]>([])
+
+  /** 当前生效展示档：auto → 有排布则自定义序，否则最近修改。 */
+  const displayMode = computed<DisplayMode>(() =>
+    resolveDisplayMode(sortPreference.value, arranged.value),
+  )
+
+  wireArrangeFlush()
+
+  /** 本次会话已 hydrate 的 vaultPath（守卫：同库反复 refresh 不重复读盘）。 */
+  let hydrateKey = ''
+
+  function arrangePayload(): ArrangePersisted | null {
+    const vault = settings.vaultPath
+    if (!vault) return null
+    return {
+      vaultPath: vault,
+      customOrder: customOrder.value,
+      arranged: arranged.value,
+      sortPreference: sortPreference.value,
+    }
+  }
+
+  function saveArrangeSoon(): void {
+    const p = arrangePayload()
+    if (p) scheduleSaveArrange(p)
+  }
+
+  /** 把拖动排序态重置为干净默认（清库 / 读库失败时）。 */
+  function resetArrange(): void {
+    customOrder.value = []
+    arranged.value = false
+    sortPreference.value = 'auto'
+    latestArrivals.value = []
+  }
 
   let indexGen = 0
 
@@ -122,7 +173,12 @@ export const useLibraryStore = defineStore('library', () => {
     }
 
     return [...list].sort((a, b) => {
-      if (sortBy.value === 'title') {
+      if (displayMode.value === 'custom') {
+        // 自定义序为全序；rank 相等（防御性 unknown）再按 mtime 兜底防闪动。
+        const rank = customRank(customOrder.value)
+        return rank(a.relativePath) - rank(b.relativePath) || b.mtime - a.mtime
+      }
+      if (displayMode.value === 'title') {
         const ta = index.value[a.relativePath]?.title ?? resolveTitle({}, a.name)
         const tb = index.value[b.relativePath]?.title ?? resolveTitle({}, b.name)
         return ta.localeCompare(tb, 'zh')
@@ -147,13 +203,38 @@ export const useLibraryStore = defineStore('library', () => {
       files.value = []
       dirs.value = []
       index.value = {}
+      resetArrange()
+      hydrateKey = '' // 清库后重开同一库也要重新读盘，不能沿用内存残留
       return
     }
     loading.value = true
+    const path = settings.vaultPath
     try {
-      const listing = await nativeFs.readVault(settings.vaultPath)
+      const listing = await nativeFs.readVault(path)
+      if (settings.vaultPath !== path) return // 读盘期间已换库/清库：丢弃这次结果
+      // 首次开库：从 .zenreader/arrange.json 载入该库自定义序（浏览器 dev 退化读
+      // localStorage）。此后同库反复 refresh 沿用内存态——文件只是重启后的入口，
+      // 刷新途中不重复读盘，也不让旧文件盖掉刚排好还没落盘的新序。
+      if (hydrateKey !== path) {
+        hydrateKey = path
+        const p = await loadArrange(path)
+        if (settings.vaultPath !== path) return // 载序期间换库：等新库自己的 refresh
+        customOrder.value = p?.customOrder ?? []
+        arranged.value = p?.arranged ?? false
+        sortPreference.value = p?.sortPreference ?? 'auto'
+      }
+      const prevPaths = new Set(files.value.map((f) => f.relativePath))
       files.value = listing.files
       dirs.value = listing.dirs
+      // 自定义序与新一轮磁盘内容对齐：剪除已失卷、rename 保位、新卷立于最前。
+      const { order, arrivals } = reconcileCustomOrder(
+        customOrder.value,
+        listing.files,
+        prevPaths,
+      )
+      customOrder.value = order
+      latestArrivals.value = arrivals
+      saveArrangeSoon()
       // 增量索引：只清掉已消失的文件，未变更者沿用旧索引——
       // 窗口聚焦等频繁刷新不再让卡片元信息闪烁。
       const live = new Set(listing.files.map((f) => f.relativePath))
@@ -165,6 +246,8 @@ export const useLibraryStore = defineStore('library', () => {
       console.error('[zenreader] read_vault failed', e)
       files.value = []
       dirs.value = []
+      resetArrange()
+      hydrateKey = '' // 重试时重新读盘，不沿用残缺内存态
       // 读库失败不再静默成「尚无书籍」，轻声告知用户原因。
       useToast().notify(COPY.vaultReadFailed, 'sandal')
     } finally {
@@ -177,6 +260,36 @@ export const useLibraryStore = defineStore('library', () => {
     if (!dir) return
     settings.setVaultPath(dir)
     await refresh()
+  }
+
+  /** 用户显式点排序胶囊某档（非 auto）——记住该档。 */
+  function setSort(mode: Exclude<ArrangeSortMode, 'auto'>) {
+    sortPreference.value = mode
+    saveArrangeSoon()
+  }
+
+  /**
+   * 首次拖动排序把基线钉成当前默认序（最近修改降序快照）。未产生任何 drop 前不改
+   * `arranged`——因此"光进拖动排序不改动"不会把默认偷换成自定义序。
+   */
+  function seedDefaultOrder(): void {
+    if (arranged.value) return
+    customOrder.value = [...files.value]
+      .sort((a, b) => b.mtime - a.mtime)
+      .map((f) => f.relativePath)
+  }
+
+  /**
+   * 提交一次"可见子序列内的单卡位移"回全库自定义序。无实际变化（no-op）不置 arranged，
+   * 不算一次有效排布。
+   */
+  function commitVisibleMove(movedPath: string, newVisibleOrder: string[]): void {
+    const next = mergeVisibleMove(customOrder.value, newVisibleOrder, movedPath)
+    if (!next) return
+    customOrder.value = next
+    arranged.value = true
+    sortPreference.value = 'auto' // 排布后即默认
+    saveArrangeSoon()
   }
 
   /** Create a real directory (分组) inside the vault, then rescan. */
@@ -257,13 +370,22 @@ export const useLibraryStore = defineStore('library', () => {
     index,
     search,
     selectedFolder,
-    sortBy,
     loading,
     hasVault,
     totalCount,
     filtered,
     folderTree,
     flatFolders,
+    // 拖动排序（手动排布）
+    displayMode,
+    customOrder,
+    arranged,
+    sortPreference,
+    latestArrivals,
+    setSort,
+    seedDefaultOrder,
+    commitVisibleMove,
+    flushArrange,
     refresh,
     openVault,
     createFolder,

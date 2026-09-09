@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
 import type { IconName } from '@/components/common/ZIcon.vue'
@@ -14,6 +14,8 @@ import { useSettingsStore } from '@/stores/settings'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useVaultDrop, type DropImportResult } from '@/composables/useVaultDrop'
 import { useToast } from '@/composables/useToast'
+import { useCardArrange } from '@/composables/useCardArrange'
+import { customRank } from '@/lib/arrange'
 import { COPY } from '@/lib/copy'
 import { folderPathFromRelative } from '@/lib/vault'
 import type { ThemeName } from '@/types/settings'
@@ -41,7 +43,19 @@ function cycleTheme() {
 const SORTS = [
   { key: 'modified', label: '最近修改' },
   { key: 'title', label: '标题' },
+  { key: 'custom', label: COPY.sortHand },
 ] as const
+type SortKey = (typeof SORTS)[number]['key']
+
+/** 「自定义」档仅在完成过排布后出现（从未排布时它没有意义）。 */
+const visibleSorts = computed(() =>
+  library.arranged ? SORTS : SORTS.filter((o) => o.key !== 'custom'),
+)
+
+function onSortClick(key: SortKey) {
+  if (key === 'custom' && !library.arranged) return
+  library.setSort(key)
+}
 
 function toggleFolder(path: string) {
   library.selectedFolder = library.selectedFolder === path ? '' : path
@@ -175,9 +189,93 @@ function onDropResult(r: DropImportResult) {
 const { dragging: dropDragging } = useVaultDrop(
   () => library.selectedFolder,
   onDropResult,
+  // 拖动排序中不受新卷，避免正在排的序列被 refresh 打乱。
+  () => !arranging.value,
 )
 
+// —— 拖动排序（手动排布）：就地拖拽 ——
+const arranging = ref(false)
+/** 拖动排序工作序列：当前可见集按自定义序基线投影；拖拽就地重排它。 */
+const arrangePaths = ref<string[]>([])
+const mainRef = ref<HTMLElement | null>(null)
+
+const arrangeReady = computed(
+  () => library.hasVault && library.filtered.length >= 2,
+)
+
+/** 供卡片渲染：把 relativePath 快速反查 VaultFile。 */
+const byPath = computed(() => {
+  const m = new Map<string, VaultFile>()
+  for (const f of library.files) m.set(f.relativePath, f)
+  return m
+})
+
+/** 拖动排序中展示本地序列，否则展示 store 的 filtered。 */
+const cardsToRender = computed<VaultFile[]>(() =>
+  arranging.value
+    ? arrangePaths.value
+        .map((p) => byPath.value.get(p))
+        .filter((f): f is VaultFile => !!f)
+    : library.filtered,
+)
+
+const gridClass = computed(() =>
+  [
+    'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
+    // 整片网格淡入：非拖动排序态每次重挂载播放一次（见下方 key）。
+    arranging.value ? 'arrange-active' : 'grid-arrive',
+  ].join(' '),
+)
+
+/**
+ * 网格重挂载钥匙：换分组/进出拖动排序时强制重挂载整片网格，
+ * 让 .grid-arrive 从头播放、并让旧组卡片即刻退场（不再拖沓半秒）。
+ * 不掺入搜索词——寻词过程要保持即时、逐键不闪动。
+ */
+const gridKey = computed(() =>
+  arranging.value ? 'arrange' : `folder:${library.selectedFolder || '__root__'}`,
+)
+
+const { drag, onPick, cancelDrag } = useCardArrange({
+  paths: arrangePaths,
+  getGrid: () => mainRef.value?.querySelector<HTMLElement>('.arrange-grid') ?? null,
+  getScroll: () => mainRef.value,
+  lookupFile: (p) => byPath.value.get(p) ?? null,
+  onCommit: onArrangeCommit,
+})
+
+/** 一次落子：合并回全库自定义序；首次真正排布完成时给一声轻响。 */
+function onArrangeCommit(movedPath: string) {
+  const wasArranged = library.arranged
+  library.commitVisibleMove(movedPath, arrangePaths.value.slice())
+  if (library.arranged && !wasArranged) notify(COPY.arrangeDone, 'bamboo')
+}
+
+/** 进入拖动排序：先钉自定义序基线，再把可见集投影到该序列，方便直接上手拖。 */
+function startArrange() {
+  if (arranging.value || !arrangeReady.value) return
+  library.seedDefaultOrder()
+  const visible = library.filtered.map((f) => f.relativePath)
+  const rank = customRank(library.customOrder)
+  arrangePaths.value = [...visible].sort((a, b) => rank(a) - rank(b))
+  arranging.value = true
+}
+
+function finishArrange() {
+  if (drag.value?.started) cancelDrag()
+  arranging.value = false
+  arrangePaths.value = []
+}
+
+/** 拖动排序中每张卡的角标：新卷示「新」，其余示序号以增强位置感；被拿起卷不标。 */
+function badgeFor(path: string, i: number): string {
+  if (!arranging.value) return ''
+  if (drag.value?.started && drag.value.path === path) return ''
+  return library.latestArrivals.includes(path) ? COPY.newBadge : String(i + 1)
+}
+
 function onWindowFocus() {
+  if (arranging.value) return // 拖动排序中聚焦不再刷新，避免序列被搅动
   library.refresh()
 }
 
@@ -190,14 +288,35 @@ function clearSearch() {
   searchInput.value?.focus()
 }
 
-/** 非输入态按 `/` 直达寻书。 */
+/** 非输入态按 `/` 直达寻书；拖动排序中 Esc 先撤拖拽、再按退出拖动排序。 */
 function onGlobalKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    if (!arranging.value) return
+    e.preventDefault()
+    if (drag.value?.started) {
+      cancelDrag()
+      return
+    }
+    finishArrange()
+    return
+  }
   if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
   const t = e.target as HTMLElement
   if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
+  if (arranging.value) return // 拖动排序中寻书已让位
   e.preventDefault()
   searchInput.value?.focus()
 }
+
+// 拖动排序中若可见集被外部侥幸改动（如磁盘变化），干净退出避免把过期序列写回。
+watch(
+  () => library.files.map((f) => f.relativePath).sort().join('\u0001'),
+  (next, prev) => {
+    if (arranging.value && next !== prev) {
+      finishArrange()
+    }
+  },
+)
 
 onMounted(() => {
   library.refresh()
@@ -206,6 +325,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (drag.value) cancelDrag()
   window.removeEventListener('focus', onWindowFocus)
   window.removeEventListener('keydown', onGlobalKey)
 })
@@ -226,8 +346,9 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-1.5">
         <button
           v-if="library.hasVault"
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft"
           :title="COPY.refresh"
+          :disabled="arranging"
           @click="library.refresh()"
         >
           <ZIcon name="refresh" :size="17" />
@@ -277,7 +398,10 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="flex min-h-0 flex-1">
-      <aside class="hidden h-full w-56 shrink-0 overflow-y-auto p-4 md:block">
+      <aside
+        class="hidden h-full w-56 shrink-0 overflow-y-auto p-4 transition-opacity duration-300 md:block"
+        :class="arranging ? 'pointer-events-none opacity-40' : ''"
+      >
         <button
           class="mb-2 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10 hover:text-ink"
           :class="{ 'bg-bamboo/15 font-medium text-ink': !library.selectedFolder }"
@@ -342,15 +466,19 @@ onBeforeUnmount(() => {
         </p>
       </aside>
 
-      <main class="h-full min-w-0 flex-1 overflow-y-auto p-6">
+      <main ref="mainRef" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
         <div class="mb-6 flex flex-wrap items-center gap-3">
-          <div class="relative min-w-0 max-w-md flex-1">
+          <div
+            class="relative min-w-0 max-w-md flex-1 transition-opacity duration-300"
+            :class="arranging ? 'pointer-events-none opacity-50' : ''"
+          >
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dusk">
               <ZIcon name="search" :size="16" />
             </span>
             <input
               ref="searchInput"
               v-model="library.search"
+              :readonly="arranging"
               :placeholder="COPY.search"
               class="w-full rounded-full bg-paper-deep/60 py-2 pl-9 pr-9 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
               @focus="searchFocused = true"
@@ -372,21 +500,57 @@ onBeforeUnmount(() => {
             </kbd>
           </div>
 
-          <div class="flex rounded-full bg-paper-deep/60 p-0.5">
+          <!-- 排序胶囊：拖动排序中让位（正在编辑序列本身） -->
+          <div
+            v-if="!arranging"
+            class="flex rounded-full bg-paper-deep/60 p-0.5"
+          >
             <button
-              v-for="o in SORTS"
+              v-for="o in visibleSorts"
               :key="o.key"
               class="rounded-full px-3 py-1 text-xs transition-colors duration-200"
               :class="
-                library.sortBy === o.key
+                library.displayMode === o.key
                   ? 'bg-bamboo/15 font-medium text-ink'
                   : 'text-ink-soft hover:text-ink'
               "
-              @click="library.sortBy = o.key"
+              @click="onSortClick(o.key)"
             >
               {{ o.label }}
             </button>
           </div>
+
+          <!-- 拖动排序入口 / 完成 -->
+          <button
+            class="flex items-center gap-1.5 rounded-full transition-all duration-300"
+            :class="
+              arranging
+                ? 'bg-bamboo px-4 py-1.5 text-xs text-paper hover:opacity-90'
+                : 'bg-paper-deep/60 px-3.5 py-1.5 text-xs text-ink-soft hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft'
+            "
+            :title="arranging ? undefined : COPY.arrangeNeedTwo"
+            :disabled="!arranging && !arrangeReady"
+            @click="arranging ? finishArrange() : startArrange()"
+          >
+            <ZIcon
+              name="grip"
+              :size="14"
+              :stroke-width="arranging ? 1.4 : 1.25"
+            />
+            {{ arranging ? COPY.arrangeFinish : COPY.arrange }}
+          </button>
+        </div>
+
+        <!-- 拖动排序引导条 -->
+        <div
+          v-if="arranging"
+          class="arrange-guide mb-5 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-bamboo/40 bg-bamboo/5 px-4 py-2.5 text-xs text-dusk"
+        >
+          <span class="flex items-center gap-2 text-ink-soft">
+            <ZIcon name="grip" :size="14" class="text-bamboo/70" />
+            {{ COPY.arrangeHint }}
+          </span>
+          <span class="hidden sm:inline">{{ COPY.arrangeEscHint }}</span>
         </div>
 
         <!-- 开卷中：首次扫描书库时的呼吸圆点 -->
@@ -421,20 +585,26 @@ onBeforeUnmount(() => {
           <span class="mt-5 font-serif">{{ COPY.emptySearch }}</span>
         </p>
 
-        <div
+        <TransitionGroup
           v-else
-          class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          :key="gridKey"
+          tag="div"
+          name="arrange"
+          :class="gridClass"
         >
           <DocumentCard
-            v-for="(f, i) in library.filtered"
+            v-for="(f, i) in cardsToRender"
             :key="f.relativePath"
             :file="f"
             :meta="library.index[f.relativePath]"
-            :index="i"
             :query="library.search"
+            :arrange="arranging"
+            :slot="arranging && drag?.started && drag.path === f.relativePath"
+            :badge="badgeFor(f.relativePath, i)"
             @menu="openMenu"
+            @pick="onPick"
           />
-        </div>
+        </TransitionGroup>
       </main>
     </div>
 
@@ -489,11 +659,29 @@ onBeforeUnmount(() => {
       @close="removeTarget = null"
     />
 
+    <!-- 拖动排序拖拽中的浮动克隆：随指针倾浮的"被拿起卷" -->
+    <Teleport to="body">
+      <div
+        v-if="drag?.started"
+        class="arrange-ghost pointer-events-none fixed left-0 top-0 z-40 will-change-transform"
+        :style="{
+          width: `${drag.width}px`,
+          transform: `translate3d(${drag.x}px, ${drag.y}px, 0) rotate(-1.5deg) scale(1.02)`,
+        }"
+      >
+        <DocumentCard
+          :file="drag.file"
+          :meta="library.index[drag.path]"
+          :clone="true"
+        />
+      </div>
+    </Teleport>
+
     <!-- 拖拽引卷遮罩：悬浮全屏提示，落点即入藏 -->
     <Teleport to="body">
       <Transition name="fade">
         <div
-          v-if="dropDragging"
+          v-if="dropDragging && !arranging"
           class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-paper/85 backdrop-blur-sm"
         >
           <div
