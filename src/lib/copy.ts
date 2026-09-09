@@ -55,7 +55,7 @@ export const COPY = {
   readingProgress: '读到',
   finished: '已读毕',
 
-  importDropHint: '引卷于此 —— 拖入 .md 文件',
+  importDropHint: '引卷于此 —— 拖入 .md / .html 文件',
   importFileAction: '引卷（选择文件）',
   importFolderAction: '拾整卷（选择文件夹）',
   importDone: '已引入',

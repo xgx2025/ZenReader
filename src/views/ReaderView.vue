@@ -30,6 +30,11 @@ import { wireCodeCopy } from '@/lib/markdown/codeCopy'
 import { extractStructure } from '@/lib/markdown/structure'
 import { useSelectionAnchor } from '@/composables/useSelectionAnchor'
 import { useReadingScroll } from '@/composables/useReadingScroll'
+import {
+  useHtmlReader,
+  type HtmlReaderSelection,
+} from '@/composables/useHtmlReader'
+import type { OutlineItem, ScrollInfo } from '@/lib/html/protocol'
 import { useFullscreen } from '@/composables/useFullscreen'
 import { useReaderStore } from '@/stores/reader'
 import { useNotesStore } from '@/stores/notes'
@@ -140,17 +145,306 @@ function closeViewer() {
   viewerSvg.value = null
 }
 
-/** 平滑滚到卷首 / 卷尾（Home / End / 回到卷首共用）。 */
+/** 平滑滚到卷首 / 卷尾（Home / End / 回到卷首共用）。html 时滚的是沙箱帧。 */
 function scrollToEdge(edge: 'top' | 'bottom') {
+  if (isHtml.value) {
+    html.scrollEdge(edge)
+    return
+  }
   const el = containerRef.value
   if (!el) return
   el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight, behavior: 'smooth' })
+}
+
+/**
+ * 字号按钮。md：改正文字号。html：退化为整页 zoom（±0.1，0.6–1.6 封顶）——
+ * 帧内容按文档自身 px 排版，改字号不可行，缩放才是"看得更舒服"的等价手段。
+ */
+function stepFont(delta: number) {
+  if (isHtml.value) {
+    const base = html.zoom.value + (delta > 0 ? 0.1 : -0.1)
+    html.setZoomBy(base)
+  } else {
+    bumpFont(delta)
+  }
 }
 const anchors = computed<AppliedAnchor[]>(() =>
   notesStore.notes
     .filter((n): n is Note & { anchor: HighlightAnchor } => n.anchor !== null)
     .map((n) => ({ noteId: n.id, anchor: n.anchor })),
 )
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HTML 原样式直读（沙箱 iframe）。只有 .html/.htm 走到这套——md 的阅读路径不触碰
+// 下面任何标识符：isHtml 由 doc.format 判定，换卷即整体复位，互不污染。
+// ─────────────────────────────────────────────────────────────────────────────
+const isHtml = computed(() => doc.value?.format === 'html')
+
+/**
+ * 沉浸式浮条高度（px）：同时是 agent 注入到文档顶部的起始留白，让文章起点
+ * 对齐在玻璃条下沿。与模板 h-14 / 面板 mt-14 同值，改动时三处需同步。
+ */
+const HTML_BAR_H = 56
+
+/** 阅读滚动键（窗口冒进 html 模式时也拦默认，交给帧侧语义统一滚）。 */
+const HTML_SCROLL_KEYS = new Set([
+  ' ',
+  'j',
+  'k',
+  'ArrowDown',
+  'ArrowUp',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+  'PageDown',
+  'PageUp',
+])
+
+/** 沙箱 iframe：`sandbox="allow-scripts"` 且**无** allow-same-origin → 不透明源，
+ *  文档自有 JS 够不到应用源/Tauri IPC；正文原样式直读、自带滚动。 */
+const htmlFrameEl = ref<HTMLIFrameElement | null>(null)
+/** 帧内扫出的目录（OutlineItem）→ 合成 TOC 侧栏项（id = `zhh-{i}`，宿主自持）。 */
+const htmlOutline = ref<OutlineItem[]>([])
+const htmlToc = computed(() =>
+  htmlOutline.value.map((o, i) => ({ ...o, id: `zhh-${i}` })),
+)
+/** TOC 侧栏数据源：md 用 toc、html 用 htmlToc，结构同型。 */
+const tocItems = computed(() => (isHtml.value ? htmlToc.value : toc.value))
+/** 帧内当前目录下标（agent 布局判定，-1 = 首段之前）。 */
+const htmlActiveIndex = ref(-1)
+/** 帧内滚动 y（px）→ 回到卷首按钮去留。 */
+const htmlScrollY = ref(0)
+const htmlToolbarHidden = ref(false)
+const htmlShowBackTop = computed(
+  () => htmlScrollY.value > window.innerHeight * 1.5,
+)
+const htmlZoomPct = ref(100)
+/** 帧内划词（已换算成父坐标）→ 复用现有浮动条 / composer。 */
+const htmlSel = ref<HtmlReaderSelection | null>(null)
+const htmlSelVisible = ref(false)
+/** 续读须等帧布局就绪（evt.ready）才能发 scrollToRatio——先攒着，ready 后兑现。 */
+const htmlResumeRatio = ref<number | null>(null)
+let htmlResumeTimer: ReturnType<typeof setTimeout> | null = null
+let htmlLastY = 0
+
+/** 顶栏去留：md 由容器滚动判定，html 由帧内滚动判定。
+ *  注意：computed 不解包 getter 返回的 ref——此处必须取 .value 解成布尔，
+ *  否则 headerHidden 恒为 truthy，顶栏永远被 -translate-y-full 抬出屏外。 */
+const headerHidden = computed(() =>
+  isHtml.value ? htmlToolbarHidden.value : toolbarHidden.value,
+)
+
+/**
+ * 顶栏外观：md 的条在文档流内；html 则浮出流外、固定悬浮在文档上方——
+ * 正文 iframe 铺满整窗、从半透明毛玻璃条下掠过（沉浸式）。高度锁 h-14
+ * （56px），与面板让位的 mt-14 / 玻璃条自身同值对齐，改动时需同步。
+ */
+const headerBarClass = computed<string[]>(() => {
+  const move = headerHidden.value ? '-translate-y-full' : 'translate-y-0'
+  const glide = 'transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]'
+  if (isHtml.value) {
+    return [
+      'html-glass-bar fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between gap-2 px-3',
+      glide,
+      move,
+    ]
+  }
+  return [
+    'header-fade relative z-20 flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md',
+    glide,
+    move,
+  ]
+})
+
+/** 整批同步高亮：html 帧侧没有"增量包/拆"——发全量，agent 清旧重打。 */
+function syncHtmlHighlights() {
+  html.applyAnchors(anchors.value)
+}
+
+function onHtmlSelection(sel: HtmlReaderSelection | null, crossBlock: boolean) {
+  if (crossBlock) {
+    htmlSel.value = null
+    htmlSelVisible.value = false
+    notify(COPY.anchorCrossBlock, 'sandal')
+    return
+  }
+  htmlSel.value = sel
+  htmlSelVisible.value = sel !== null
+}
+
+function onHtmlScroll(info: ScrollInfo) {
+  if (restoring.value) return
+  const d = reader.current
+  if (d) progressStore.record(d.relativePath, d.sourceHash, info.ratio)
+  htmlActiveIndex.value = info.activeIndex
+  const item = htmlToc.value[info.activeIndex]
+  activeHeadingId.value = item ? item.id : ''
+  const y = info.y
+  htmlScrollY.value = y
+  const delta = info.delta !== 0 ? info.delta : y - htmlLastY
+  htmlLastY = y
+  // 与 useReadingScroll 同款的藏/露阈值：下滚过 64px 且增量超过抖动才收，回滚即现。
+  if (delta > 6 && y > 64) htmlToolbarHidden.value = true
+  else if (delta < -6) htmlToolbarHidden.value = false
+}
+
+function onHtmlOutline(outline: OutlineItem[]) {
+  htmlOutline.value = outline
+}
+
+function onHtmlReady() {
+  // 先补高亮（帧就绪才可靠）再兑现续读。
+  syncHtmlHighlights()
+  const ratio = htmlResumeRatio.value
+  if (ratio !== null) {
+    htmlResumeRatio.value = null
+    html.scrollToRatio(ratio)
+    showResumeHint.value = true
+    setTimeout(() => {
+      showResumeHint.value = false
+    }, 2600)
+  }
+  if (htmlResumeTimer) clearTimeout(htmlResumeTimer)
+  htmlResumeTimer = null
+  // 帧已可用，恢复进度记录（loadDocument 里 restore 一直拦着）。
+  restoring.value = false
+}
+
+function onHtmlZoom(z: number) {
+  htmlZoomPct.value = Math.round(z * 100)
+}
+
+function onHtmlOpenDoc(href: string) {
+  const base = route.params.path as string | undefined
+  const resolved = base ? resolveDocLink(base, href) : null
+  if (resolved) void router.push(`/read/${encodeURIComponent(resolved)}`)
+}
+
+function onHtmlOpenExternal(url: string) {
+  // 帧侧已拦默认、只放 http(s)/mailto——这里再自证一次，过不了就静默。
+  if (!/^(?:https?:\/\/|mailto:)/i.test(url)) return
+  if (isTauri()) void openExternal(url)
+  else window.open(url, '_blank', 'noopener')
+}
+
+/** html 模式下一章/上一章：目录项按当前所在项平移，头尾推到卷首/卷尾。 */
+function htmlJumpChapter(dir: 1 | -1) {
+  const list = htmlToc.value
+  if (list.length === 0) {
+    html.scrollEdge(dir === 1 ? 'bottom' : 'top')
+    return
+  }
+  const idx = htmlActiveIndex.value
+  if (
+    (dir === 1 && idx >= list.length - 1) ||
+    (dir === -1 && (idx < 0 || idx === 0))
+  ) {
+    html.scrollEdge(dir === 1 ? 'bottom' : 'top')
+    return
+  }
+  html.scrollToHeading(Math.min(list.length - 1, Math.max(0, idx + dir)))
+}
+
+/**
+ * 帧内按键（焦点在 iframe 时由 agent 转发而来；或焦点在本页但处于 html 模式时
+ * 由 onKeydown 兜底转进）。滚动键要自己滚帧——agent 已 preventDefault 防双滚。
+ */
+function onHtmlKey(e: { key: string; shiftKey: boolean }) {
+  switch (e.key) {
+    case 'Escape':
+      if (composerOpen.value) composer.value = null
+      else if (settings.zenMode) setZen(false)
+      else if (showNotes.value) showNotes.value = false
+      else if (showToc.value) showToc.value = false
+      else if (isFullscreen.value) toggleFullscreen()
+      return
+    case 'j':
+    case 'ArrowDown':
+      html.scrollByFraction(0.8)
+      return
+    case 'k':
+    case 'ArrowUp':
+      html.scrollByFraction(-0.8)
+      return
+    case ' ':
+      html.scrollByFraction(e.shiftKey ? -0.9 : 0.9)
+      return
+    case 'ArrowRight':
+      htmlJumpChapter(1)
+      return
+    case 'ArrowLeft':
+      htmlJumpChapter(-1)
+      return
+    case 'PageDown':
+      html.scrollByFraction(0.9)
+      return
+    case 'PageUp':
+      html.scrollByFraction(-0.9)
+      return
+    case 'Home':
+      html.scrollEdge('top')
+      return
+    case 'End':
+      html.scrollEdge('bottom')
+      return
+    case 't':
+    case 'T':
+      showToc.value = !showToc.value
+      return
+    case 'n':
+    case 'N':
+      showNotes.value = !showNotes.value
+      return
+    case 'z':
+    case 'Z':
+      setZen(!settings.zenMode)
+      return
+    case '?':
+      showShortcuts.value = !showShortcuts.value
+      return
+  }
+}
+
+/** html 划词建笔记：宿主拿到的 anchor 已换算好，直接落库 + 整批重打高亮。 */
+async function onHtmlHighlight() {
+  const sel = htmlSel.value
+  if (!sel) return
+  const note = makeNote(sel.anchor, '', 'highlight')
+  try {
+    await notesStore.add(note)
+    applyNoteAnchor(note.id, sel.anchor)
+    htmlSel.value = null
+    htmlSelVisible.value = false
+  } catch {
+    notify(COPY.opFailed, 'sandal')
+  }
+}
+
+function onHtmlOpenComposer() {
+  const sel = htmlSel.value
+  if (!sel) return
+  composer.value = {
+    quote: sel.anchor.quote,
+    initial: '',
+    title: COPY.selectionNote,
+    noteId: null,
+    anchor: sel.anchor,
+  }
+  htmlSel.value = null
+  htmlSelVisible.value = false
+}
+
+const html = useHtmlReader(htmlFrameEl, {
+  onReady: onHtmlReady,
+  onScroll: onHtmlScroll,
+  onOutline: onHtmlOutline,
+  onSelection: onHtmlSelection,
+  onOpenDoc: onHtmlOpenDoc,
+  onOpenExternal: onHtmlOpenExternal,
+  onKey: onHtmlKey,
+  onZoom: onHtmlZoom,
+})
 
 /** 该笔记引文在正文中的起始偏移；自由笔记（无引文）或定位失败 → -1。 */
 function noteDocOffset(n: Note): number {
@@ -304,15 +598,26 @@ function renderProse() {
   wireCodeCopy(el)
 }
 
-/** 局部更新：只为此条笔记包一层 <mark>，不整篇重建、不重跑代码高亮。 */
+/**
+ * 为一条笔记落标。md：局部只包此条 <mark>（不整篇重建）。html：帧内无"增量"，
+ * 走整批重发（agent 清旧重打）；notesStore.add 已在调用前落库，anchors 已含新条。
+ */
 function applyNoteAnchor(noteId: string, anchor: HighlightAnchor) {
+  if (isHtml.value) {
+    syncHtmlHighlights()
+    return
+  }
   const el = proseEl.value
   if (!el) return
   applyAnchors(el, [{ noteId, anchor }])
 }
 
-/** 局部更新：拆掉此条笔记的高亮，并把被分割的文本节点缝回去。 */
+/** 拆掉此条笔记的高亮。md：缝回被分割的文本节点。html：整批重发（去该条）。 */
 function removeNoteAnchor(id: string) {
+  if (isHtml.value) {
+    syncHtmlHighlights()
+    return
+  }
   const mark = proseEl.value?.querySelector(`mark.hl[data-note-id="${id}"]`)
   if (!mark?.parentNode) return
   const parent = mark.parentNode
@@ -334,6 +639,38 @@ async function loadDocument() {
   }
   await notesStore.load(relPath)
   await nextTick()
+
+  if (loaded.format === 'html') {
+    // HTML 分支：正文在沙箱 iframe 内原样式直读。proseText 用宿主侧静态快照，
+    // 使字数/寻词/笔记排序与 md 同源；渲染与滚动都在帧内，续读推迟到
+    // evt.ready（布局就绪）再发 scrollToRatio。md 的 renderProse/恢复不适用。
+    proseText.value = loaded.plainText
+    htmlOutline.value = []
+    htmlActiveIndex.value = -1
+    htmlScrollY.value = 0
+    htmlLastY = 0
+    htmlToolbarHidden.value = false
+    htmlZoomPct.value = 100 // 新开一页 zoom 复位，字号按钮的 % 不能还挂着上一页的
+    activeHeadingId.value = ''
+    htmlSel.value = null
+    htmlSelVisible.value = false
+    const saved = progressStore.get(relPath)
+    htmlResumeRatio.value =
+      saved &&
+      saved.hash === loaded.sourceHash &&
+      saved.ratio >= RESUME_MIN_RATIO &&
+      saved.ratio < FINISHED_RATIO
+        ? saved.ratio
+        : null
+    html.open(loaded, settings.theme, HTML_BAR_H)
+    // 兜底：帧若被页面 CSP 拦下而永不 ready，别把进度记录永久卡死。
+    if (htmlResumeTimer) clearTimeout(htmlResumeTimer)
+    htmlResumeTimer = setTimeout(() => {
+      restoring.value = false
+    }, 3000)
+    return
+  }
+
   renderProse()
   // Same component instance is reused across documents - reset the surface,
   // then restore the saved position (续读) if the content still matches.
@@ -390,6 +727,10 @@ function makeFreeNote(note: string): Note {
 }
 
 async function onHighlight() {
+  if (isHtml.value) {
+    await onHtmlHighlight()
+    return
+  }
   const cap = capture.value
   if (!cap) return
   const note = makeNote(cap.anchor, '', 'highlight')
@@ -403,6 +744,10 @@ async function onHighlight() {
 }
 
 function onOpenComposer() {
+  if (isHtml.value) {
+    onHtmlOpenComposer()
+    return
+  }
   const cap = capture.value
   if (!cap) return
   composer.value = {
@@ -530,6 +875,11 @@ function onProseClick(e: MouseEvent) {
 }
 
 function jumpToHighlight(id: string) {
+  // html：锚点在帧内，命令 agent 滚到该条高亮（mark 本身持续可见，无 pulse）。
+  if (isHtml.value) {
+    html.scrollToNote(id)
+    return
+  }
   const mark = proseEl.value?.querySelector(`mark.hl[data-note-id="${id}"]`)
   if (!mark) return
   mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -561,6 +911,12 @@ function toggleFontFamily() {
 }
 
 function scrollToHeading(id: string) {
+  // TOC 侧栏点击共用入口：html 项 id 是合成的 `zhh-{i}`，md 是正文标题 id。
+  if (isHtml.value) {
+    const m = /^zhh-(\d+)$/.exec(id)
+    if (m) html.scrollToHeading(Number(m[1]))
+    return
+  }
   scrollToHeadingEl(id)
 }
 
@@ -603,6 +959,14 @@ function isTypingTarget(e: KeyboardEvent): boolean {
 function onKeydown(e: KeyboardEvent) {
   if (e.metaKey || e.ctrlKey || e.altKey) return
   if (isTypingTarget(e)) return
+
+  // html：阅读区就是沙箱 iframe。滚动/面板键统一交给帧侧语义（与 agent 转发一致），
+  // 防止窗口键冒进 md 的容器滚动逻辑（容器在 html 下并不滚动）。
+  if (isHtml.value) {
+    if (HTML_SCROLL_KEYS.has(e.key)) e.preventDefault()
+    onHtmlKey({ key: e.key, shiftKey: e.shiftKey })
+    return
+  }
 
   switch (e.key) {
     case 'Escape':
@@ -662,7 +1026,12 @@ function onKeydown(e: KeyboardEvent) {
 
 watch(
   () => settings.theme,
-  () => {
+  (t) => {
+    // html：正文自带样式不动，只需重调帧内高亮的配色（agent 换 CSS var）。
+    if (isHtml.value) {
+      html.setTheme(t)
+      return
+    }
     if (proseEl.value && doc.value) {
       // mermaid 图卡内藏源码（data-mermaid-src），主题切换整图重绘。
       renderMermaidBlocks(proseEl.value, settings.theme)
@@ -682,6 +1051,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   document.title = COPY.appTitle
   if (puffTimer) clearTimeout(puffTimer)
+  if (htmlResumeTimer) {
+    clearTimeout(htmlResumeTimer)
+    htmlResumeTimer = null
+  }
   progressStore.flush()
 })
 
@@ -713,8 +1086,7 @@ watch(() => route.params.path, loadDocument)
            给本栏一个 z-index 让整棵子树（含下拉浮层）抬到阅读区之上。 -->
       <header
         v-if="!settings.zenMode || ritualStage < 1"
-        class="header-fade relative z-20 flex shrink-0 items-center justify-between gap-2 bg-paper/55 px-3 py-2.5 backdrop-blur-md transition-transform duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]"
-        :class="toolbarHidden ? '-translate-y-full' : 'translate-y-0'"
+        :class="headerBarClass"
       >
         <div class="flex min-w-0 items-center gap-1">
           <IncenseControl
@@ -746,14 +1118,16 @@ watch(() => route.params.path, loadDocument)
   
           <button
             class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            @click="bumpFont(-1)"
+            @click="stepFont(-1)"
           >
             <ZIcon name="minus" :size="15" />
           </button>
-          <span class="w-6 text-center text-xs text-dusk">{{ settings.fontSize }}</span>
+          <span class="w-9 text-center text-xs text-dusk tabular-nums">{{
+            isHtml ? `${htmlZoomPct}%` : settings.fontSize
+          }}</span>
           <button
             class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            @click="bumpFont(1)"
+            @click="stepFont(1)"
           >
             <ZIcon name="plus" :size="15" />
           </button>
@@ -768,6 +1142,7 @@ watch(() => route.params.path, loadDocument)
             <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
           </button>
           <button
+            v-if="!isHtml"
             class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
             :class="{ 'text-bamboo': settings.fontFamily === 'sans' }"
             :title="COPY.font"
@@ -831,20 +1206,21 @@ watch(() => route.params.path, loadDocument)
         <aside
           v-if="showToc && (!settings.zenMode || ritualStage < 2)"
           class="flex w-64 shrink-0 flex-col overflow-hidden border-r border-line"
+          :class="isHtml && !headerHidden ? 'mt-14' : ''"
         >
           <div class="border-b border-line px-4 py-3">
             <h2 class="font-serif text-base">{{ COPY.toc }}</h2>
           </div>
           <nav class="flex-1 space-y-0.5 overflow-y-auto p-3">
             <p
-              v-if="toc.length === 0"
+              v-if="tocItems.length === 0"
               class="flex flex-col items-center px-2 py-6 text-xs text-dusk"
             >
               <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
               <span class="mt-3">{{ COPY.emptyToc }}</span>
             </p>
             <a
-              v-for="item in toc"
+              v-for="item in tocItems"
               :key="item.id"
               :ref="(el) => setTocItemRef(item.id, el)"
               :href="`#${item.id}`"
@@ -865,7 +1241,19 @@ watch(() => route.params.path, loadDocument)
 
       <!-- Reading surface -->
       <div ref="containerRef" class="min-w-0 flex-1 overflow-y-auto">
+        <!-- HTML 原样式直读：沙箱 iframe 撑满阅读区、自带滚动（md 用下面 prose 区）。
+             sandbox 仅 allow-scripts → 不透明源；sandbox 不含 allow-same-origin，
+             文档自身 JS 永远够不到应用源 / Tauri IPC。 -->
+        <iframe
+          v-if="isHtml && doc"
+          ref="htmlFrameEl"
+          class="block h-full w-full border-0"
+          sandbox="allow-scripts"
+          referrerpolicy="no-referrer"
+          :title="doc.title"
+        ></iframe>
         <div
+          v-else
           class="px-6 py-10 transition-[padding] duration-700 ease-zen md:px-12"
           :class="{ 'py-16': settings.zenMode && ritualStage >= 2 }"
         >
@@ -893,6 +1281,7 @@ watch(() => route.params.path, loadDocument)
         <aside
           v-if="showNotes && (!settings.zenMode || ritualStage < 2)"
           class="w-80 shrink-0 border-l border-line"
+          :class="isHtml && !headerHidden ? 'mt-14' : ''"
         >
           <NotesPanel
             :notes="orderedNotes"
@@ -959,8 +1348,8 @@ watch(() => route.params.path, loadDocument)
     </Transition>
 
     <SelectionToolbar
-      :rect="capture?.rect ?? null"
-      :visible="visible"
+      :rect="isHtml ? (htmlSel?.rect ?? null) : (capture?.rect ?? null)"
+      :visible="isHtml ? htmlSelVisible : visible"
       @highlight="onHighlight"
       @note="onOpenComposer"
     />
@@ -991,7 +1380,7 @@ watch(() => route.params.path, loadDocument)
     <!-- 回到卷首：行至半卷方才浮现，回顶即隐；禅境不设，免扰清净。 -->
     <Transition name="fade">
       <button
-        v-if="showBackTop && !settings.zenMode"
+        v-if="(isHtml ? htmlShowBackTop : showBackTop) && !settings.zenMode"
         class="fixed bottom-6 right-6 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-paper/90 font-serif text-sm text-ink-soft shadow-zen-sm backdrop-blur-sm transition-colors hover:text-ink"
         :title="COPY.backToTop"
         @click="scrollToEdge('top')"
@@ -1020,3 +1409,19 @@ watch(() => route.params.path, loadDocument)
 
   </div>
 </template>
+
+<style scoped>
+/*
+ * html 直读的沉浸式顶栏：浮出文档流、压在正文 iframe 上方。
+ * 半透纸色 + 毛玻璃，正文滚动时从条下掠过；图标仍用应用主题的
+ * ink/bamboo，靠这条玻璃自身保证与任意底色的可读对比。
+ * 高 h-14 = 56px——与模板里面板让位的 mt-14 同值，改高度务必同步。
+ */
+.html-glass-bar {
+  background: color-mix(in srgb, var(--paper) 58%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  box-shadow: 0 14px 32px -20px rgba(0, 0, 0, 0.42);
+}
+</style>

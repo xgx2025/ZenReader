@@ -38,8 +38,28 @@ export const nativeFs = {
     return invoke<string>('read_file', { path })
   },
 
+  /** Read an HTML file, decoding by BOM / `<meta charset>` (GBK 存档页兼容). */
+  readHtml(path: string): Promise<string> {
+    return invoke<string>('read_html', { path })
+  },
+
+  /** 上报当前活跃书库根——`zenasset://` 资产协议以此做路径收敛。 */
+  setActiveVault(dir: string): Promise<void> {
+    return invoke('set_active_vault', { dir })
+  },
+
   writeFile(path: string, content: string): Promise<void> {
     return invoke('write_file', { path, content })
+  },
+
+  /** Copy a file verbatim (HTML 导入保字节，见 Rust 侧注释). */
+  copyFile(from: string, to: string): Promise<void> {
+    return invoke('copy_file', { from, to })
+  },
+
+  /** Write raw bytes from a browser File (base64) — HTML 内存字节落盘. */
+  writeBase64(path: string, data: string): Promise<void> {
+    return invoke('write_base64', { path, data })
   },
 
   deleteFile(path: string): Promise<void> {

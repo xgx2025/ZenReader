@@ -23,3 +23,9 @@ rfd = "0.15"
 # bundled 从源码编译 SQLite，避免桌面分发依赖系统 SQLite；default-features=false 去掉
 # 用不上的 cache/wasm 特性（连接按命令开关，语句缓存无收益）。
 rusqlite = { version = "0.40.2", features = ["bundled"], default-features = false }
+# HTML 文件按 <meta charset> 解码（存档中文页常见 GBK，read_file 严格 UTF-8 会报错）。
+encoding_rs = "0.8"
+# zenasset 资产协议：URL 段百分号解码。
+percent-encoding = "2"
+# HTML 导入按原始字节落盘（text 往返会把 GBK 重编码成 UTF-8 却留下 gb2312 meta）。
+base64 = "0.22"

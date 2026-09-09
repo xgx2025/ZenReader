@@ -22,7 +22,11 @@ export interface VaultListing {
  */
 export interface Document {
   title: string
-  /** Raw markdown including frontmatter — the source of truth on disk. */
+  /** Which renderer serves this document: `.md` renders zen-prose from
+   *  `source`; `.html/.htm` displays the original in a sandboxed iframe. */
+  format: 'markdown' | 'html'
+  /** Raw source on disk (markdown including frontmatter, or the HTML bytes
+   *  decoded to text) — the source of truth. */
   source: string
   /** Rendered + sanitized HTML cache for this open session. */
   html: string

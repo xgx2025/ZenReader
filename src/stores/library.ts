@@ -1,12 +1,19 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { nativeFs } from '@/lib/native'
+import { nativeFs, isTauri } from '@/lib/native'
 import { deleteDocumentNotes, moveDocumentNotes } from '@/lib/notesApi'
-import { folderPathFromRelative, resolveTitle, vaultFile } from '@/lib/vault'
+import {
+  folderPathFromRelative,
+  isHtmlFile,
+  resolveHtmlTitle,
+  resolveTitle,
+  vaultFile,
+} from '@/lib/vault'
 import { renderMarkdown } from '@/lib/markdown/parser'
 import { parseFrontmatter } from '@/lib/markdown/frontmatter'
 import { countWords, computeReadingTime, makeExcerpt } from '@/lib/markdown/structure'
+import { extractHtmlText, extractHtmlTitle } from '@/lib/html/text'
 import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
 import { useToast } from '@/composables/useToast'
@@ -212,6 +219,9 @@ export const useLibraryStore = defineStore('library', () => {
     try {
       const listing = await nativeFs.readVault(path)
       if (settings.vaultPath !== path) return // 读盘期间已换库/清库：丢弃这次结果
+      // HTML 原样式直读的 zenasset:// 资产按"活跃书库根"收敛——开库/刷新即上报
+      // 一次（fire-and-forget 兜底；reader.open 每次打开也防御性上报）。浏览器 dev 空操作。
+      if (isTauri()) void nativeFs.setActiveVault(path).catch(() => {})
       // 首次开库：从 .zenreader/arrange.json 载入该库自定义序（浏览器 dev 退化读
       // localStorage）。此后同库反复 refresh 沿用内存态——文件只是重启后的入口，
       // 刷新途中不重复读盘，也不让旧文件盖掉刚排好还没落盘的新序。
@@ -345,12 +355,22 @@ export const useLibraryStore = defineStore('library', () => {
       // mtime 未变即内容未变，直接沿用已有索引。
       if (index.value[f.relativePath]?.mtime === f.mtime) continue
       try {
-        const source = await nativeFs.readFile(f.path)
-        const { data, content } = parseFrontmatter(source)
-        const { plainText } = renderMarkdown(content)
+        const isHtml = isHtmlFile(f.name)
+        const source = isHtml
+          ? await nativeFs.readHtml(f.path) // GBK/meta-charset 感知
+          : await nativeFs.readFile(f.path)
+        // .html 的"正文"来自 DOMParser 静态抽取——脚本不执行，索引安全；
+        // .md 仍走 frontmatter + markdown-it 渲染。标题规则统一落到
+        // titleFromName / resolveHtmlTitle（前文 vault 单测覆盖）。
+        const fm = isHtml ? { data: {}, content: source } : parseFrontmatter(source)
+        const plainText = isHtml
+          ? extractHtmlText(source)
+          : renderMarkdown(fm.content).plainText
         const wordCount = countWords(plainText)
         index.value[f.relativePath] = {
-          title: resolveTitle(data, f.name),
+          title: isHtml
+            ? resolveHtmlTitle(extractHtmlTitle(source), f.name)
+            : resolveTitle(fm.data, f.name),
           excerpt: makeExcerpt(plainText),
           fullText: plainText,
           wordCount,
