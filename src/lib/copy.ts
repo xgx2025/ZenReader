@@ -51,6 +51,12 @@ export const COPY = {
   words: '字',
   minutes: '分钟',
 
+  // 卡片格式标识：页脚等宽小签，只留扩展名本身，不缀前导点
+  formatExtMarkdown: 'md',
+  formatExtHtml: 'html',
+  formatMdHint: 'Markdown 原稿 · 由禅阅读排版成卷',
+  formatHtmlHint: 'HTML 原样式直读 · 保留原有版式与色彩',
+
   resumeReading: '接着上次',
   readingProgress: '读到',
   finished: '已读毕',
