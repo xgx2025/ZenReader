@@ -1,3 +1,5 @@
+import type { DocumentFormat } from '@/types/document'
+
 /** Join path segments with `/`, dropping empty parts. */
 export function joinPath(...segs: string[]): string {
   return segs.filter(Boolean).join('/')
@@ -31,6 +33,14 @@ export function isDocFile(name: string): boolean {
 /** Is `name` an HTML document (.html/.htm)? */
 export function isHtmlFile(name: string): boolean {
   return /\.(html|htm)$/i.test(name)
+}
+
+/**
+ * Which reading family a file name belongs to. Callers pass names already
+ * accepted by `isDocFile`; anything that isn't HTML is a markdown 卷.
+ */
+export function docFormatOf(name: string): DocumentFormat {
+  return isHtmlFile(name) ? 'html' : 'markdown'
 }
 
 /**

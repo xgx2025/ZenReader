@@ -4,6 +4,7 @@ import {
   titleFromName,
   isHtmlFile,
   isDocFile,
+  docFormatOf,
   resolveDocLink,
   resolveHtmlTitle,
 } from './vault'
@@ -24,6 +25,21 @@ describe('vault · html 拓宽', () => {
     expect(isDocFile('e.html')).toBe(true)
     expect(isDocFile('f.htm')).toBe(true)
     expect(isDocFile('g.txt')).toBe(false)
+  })
+
+  it('docFormatOf 归入两类卷式（大小写不敏感）', () => {
+    expect(docFormatOf('a.md')).toBe('markdown')
+    expect(docFormatOf('b.markdown')).toBe('markdown')
+    expect(docFormatOf('c.MD')).toBe('markdown')
+    expect(docFormatOf('d.html')).toBe('html')
+    expect(docFormatOf('e.htm')).toBe('html')
+    expect(docFormatOf('f.HTML')).toBe('html')
+  })
+
+  it('docFormatOf 与 isDocFile 同域：非文档名不落进书库', () => {
+    // 回落 markdown 是记录在案的约定，不是意外——调用方已由 isDocFile 过滤。
+    expect(docFormatOf('note.txt')).toBe('markdown')
+    expect(isDocFile('note.txt')).toBe(false)
   })
 
   it('resolveDocLink 放行 .html/.htm 互链', () => {

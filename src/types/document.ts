@@ -17,6 +17,15 @@ export interface VaultListing {
 }
 
 /**
+ * The two document families ZenReader reads: `.md`/`.markdown` (typeset by
+ * ZenReader) and `.html`/`.htm` (read in their original styling).
+ */
+export type DocumentFormat = 'markdown' | 'html'
+
+/** Library 卷式 lens: one family, or everything. */
+export type FormatFilter = 'all' | DocumentFormat
+
+/**
  * A document rendered for reading — a transient view model built on open
  * by parsing the file's source; not persisted anywhere.
  */
@@ -24,7 +33,7 @@ export interface Document {
   title: string
   /** Which renderer serves this document: `.md` renders zen-prose from
    *  `source`; `.html/.htm` displays the original in a sandboxed iframe. */
-  format: 'markdown' | 'html'
+  format: DocumentFormat
   /** Raw source on disk (markdown including frontmatter, or the HTML bytes
    *  decoded to text) — the source of truth. */
   source: string

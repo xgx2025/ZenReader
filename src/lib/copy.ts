@@ -57,6 +57,12 @@ export const COPY = {
   formatMdHint: 'Markdown 原稿 · 由禅阅读排版成卷',
   formatHtmlHint: 'HTML 原样式直读 · 保留原有版式与色彩',
 
+  // 书库卷式筛选（列表页工具栏那枚折叠小签）
+  formatFilter: '卷式',
+  formatFilterAll: '全部',
+  formatFilterHint: '按卷式筛选书库',
+  emptyFormat: '此类尚无卷',
+
   resumeReading: '接着上次',
   readingProgress: '读到',
   finished: '已读毕',
@@ -69,6 +75,8 @@ export const COPY = {
   importDone: '已引入',
   importSkipped: '已略过',
   importTo: '引入到',
+  /** 引卷落库时若卷式筛选正生效，自动复位为「全部」，附此一声说明。 */
+  importFilterCleared: '已重置卷式筛选',
 
   // 更新检查（关于软件更新）
   about: '关于',

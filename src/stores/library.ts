@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import { nativeFs, isTauri } from '@/lib/native'
 import { deleteDocumentNotes, moveDocumentNotes } from '@/lib/notesApi'
 import {
+  docFormatOf,
   folderPathFromRelative,
   isHtmlFile,
   resolveHtmlTitle,
@@ -31,7 +32,7 @@ import {
   type ArrangeSortMode,
   type DisplayMode,
 } from '@/types/arrange'
-import type { VaultFile, FolderNode } from '@/types/document'
+import type { FormatFilter, VaultFile, FolderNode } from '@/types/document'
 
 /** Progressive-index metadata for a single file, filled in lazily. */
 export interface IndexedMeta {
@@ -105,6 +106,8 @@ export const useLibraryStore = defineStore('library', () => {
   const index = ref<Record<string, IndexedMeta>>({})
   const search = ref('')
   const selectedFolder = ref('')
+  /** 卷式筛选（全部/md/html）；与 search 同为会话态，不落盘。 */
+  const formatFilter = ref<FormatFilter>('all')
   const loading = ref(false)
 
   // —— 拖动排序（手动排布）：展示顺序的状态 + 持久化接线 ——
@@ -156,6 +159,12 @@ export const useLibraryStore = defineStore('library', () => {
 
   const filtered = computed<VaultFile[]>(() => {
     let list = files.value
+
+    // 卷式最廉，先过一遍：后续分组/全文谓词只需处理命中本式的那批。
+    if (formatFilter.value !== 'all') {
+      const want = formatFilter.value
+      list = list.filter((f) => docFormatOf(f.name) === want)
+    }
 
     if (selectedFolder.value) {
       const prefix = `${selectedFolder.value}/`
@@ -390,6 +399,7 @@ export const useLibraryStore = defineStore('library', () => {
     index,
     search,
     selectedFolder,
+    formatFilter,
     loading,
     hasVault,
     totalCount,

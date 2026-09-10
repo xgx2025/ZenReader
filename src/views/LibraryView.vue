@@ -19,7 +19,7 @@ import { customRank } from '@/lib/arrange'
 import { COPY } from '@/lib/copy'
 import { folderPathFromRelative } from '@/lib/vault'
 import type { ThemeName } from '@/types/settings'
-import type { VaultFile } from '@/types/document'
+import type { FormatFilter, VaultFile } from '@/types/document'
 
 const library = useLibraryStore()
 const settings = useSettingsStore()
@@ -59,6 +59,46 @@ function onSortClick(key: SortKey) {
 
 function toggleFolder(path: string) {
   library.selectedFolder = library.selectedFolder === path ? '' : path
+}
+
+// —— 卷式筛选：折叠成一枚小签，点击展开三档 ——
+/** md / html 沿用卡片页脚那枚小签的等宽字形与本色。 */
+const FORMAT_FILTERS = [
+  { key: 'all', label: COPY.formatFilterAll, mono: false, mark: 'text-bamboo' },
+  { key: 'markdown', label: COPY.formatExtMarkdown, mono: true, mark: 'text-bamboo' },
+  { key: 'html', label: COPY.formatExtHtml, mono: true, mark: 'text-sandal' },
+] as const
+
+const formatCurrent = computed(
+  () =>
+    FORMAT_FILTERS.find((f) => f.key === library.formatFilter) ?? FORMAT_FILTERS[0],
+)
+
+/** 未筛选时是一枚静默胶囊（与「拖动排序」同族）；筛选生效才泛出该卷式本色。 */
+const formatChipClass = computed(() => {
+  switch (library.formatFilter) {
+    case 'markdown':
+      return 'border-bamboo/25 bg-bamboo/10 text-bamboo'
+    case 'html':
+      return 'border-sandal/30 bg-sandal/12 text-sandal'
+    default:
+      return 'border-transparent bg-paper-deep/60 text-ink-soft hover:bg-bamboo/10 hover:text-ink'
+  }
+})
+
+const formatBtn = ref<HTMLElement | null>(null)
+const formatMenu = ref({ open: false, x: 0, y: 0 })
+
+/** 菜单锚在签的左下角；ContextMenu 自会按视口夹取。 */
+function openFormatMenu() {
+  const r = formatBtn.value?.getBoundingClientRect()
+  if (!r) return
+  formatMenu.value = { open: true, x: r.left, y: r.bottom + 6 }
+}
+
+function pickFormat(key: FormatFilter) {
+  library.formatFilter = key
+  formatMenu.value.open = false
 }
 
 // 文档操作：右击卡片或点「⋯」唤起菜单 → 移到分组 / 移出书库
@@ -178,10 +218,18 @@ async function submitFolder() {
 
 // 拖拽引卷：拖入即浮起「松手引卷入藏」，落点按当前选中分组导入。
 function onDropResult(r: DropImportResult) {
+  // 卷式是一枚一键可复原的视图滤镜，而「我要引入这个文件」的意图不可推导：
+  // 挡掉新卡的代价（以为引入失败）远大于多按一次，故有卷入库即复位为「全部」。
+  // 已知精度损失：落进来的文件本就符合当前筛选时也会一并复位——结果只带计数
+  // 不带路径，为这点偏差去扩 ImportResult 不划算。
+  const cleared = r.imported > 0 && library.formatFilter !== 'all'
+  if (cleared) library.formatFilter = 'all'
+
   const parts: string[] = []
   if (r.imported) parts.push(`${COPY.importDone} ${r.imported}`)
   if (r.skipped) parts.push(`${COPY.importSkipped} ${r.skipped}`)
   if (r.failed) parts.push(`${COPY.importError} ${r.failed}`)
+  if (cleared) parts.push(COPY.importFilterCleared)
   if (!parts.length) return
   notify(parts.join(' · '), r.imported ? 'bamboo' : 'sandal')
 }
@@ -228,13 +276,22 @@ const gridClass = computed(() =>
 )
 
 /**
- * 网格重挂载钥匙：换分组/进出拖动排序时强制重挂载整片网格，
+ * 网格重挂载钥匙：换分组/换卷式/进出拖动排序时强制重挂载整片网格，
  * 让 .grid-arrive 从头播放、并让旧组卡片即刻退场（不再拖沓半秒）。
  * 不掺入搜索词——寻词过程要保持即时、逐键不闪动。
  */
 const gridKey = computed(() =>
-  arranging.value ? 'arrange' : `folder:${library.selectedFolder || '__root__'}`,
+  arranging.value
+    ? 'arrange'
+    : `folder:${library.selectedFolder || '__root__'}:${library.formatFilter}`,
 )
+
+/** 空网格的缘由：先答「寻」、再答「卷式」，与 store 里谓词的次序一致。 */
+const emptyMessage = computed(() => {
+  if (library.search.trim()) return COPY.emptySearch
+  if (library.formatFilter !== 'all') return COPY.emptyFormat
+  return COPY.emptySearch
+})
 
 const { drag, onPick, cancelDrag } = useCardArrange({
   paths: arrangePaths,
@@ -520,6 +577,26 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
+          <!-- 卷式小签：折叠成一枚，点击展开三档；拖动排序中让位 -->
+          <button
+            v-if="!arranging"
+            ref="formatBtn"
+            type="button"
+            class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors duration-200"
+            :class="formatChipClass"
+            :title="COPY.formatFilterHint"
+            aria-haspopup="menu"
+            :aria-expanded="formatMenu.open"
+            @click="openFormatMenu"
+          >
+            <span>
+              {{ COPY.formatFilter }}：<span :class="formatCurrent.mono ? 'font-mono' : ''">{{
+                formatCurrent.label
+              }}</span>
+            </span>
+            <ZIcon name="chevron-down" :size="12" />
+          </button>
+
           <!-- 拖动排序入口 / 完成 -->
           <button
             class="flex items-center gap-1.5 rounded-full transition-all duration-300"
@@ -582,7 +659,7 @@ onBeforeUnmount(() => {
           class="mt-24 flex flex-col items-center text-center text-dusk"
         >
           <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
-          <span class="mt-5 font-serif">{{ COPY.emptySearch }}</span>
+          <span class="mt-5 font-serif">{{ emptyMessage }}</span>
         </p>
 
         <TransitionGroup
@@ -637,6 +714,32 @@ onBeforeUnmount(() => {
       >
         <ZIcon name="delete" :size="15" class="shrink-0 text-sandal" />
         {{ COPY.removeFolder }}
+      </button>
+    </ContextMenu>
+
+    <!-- 卷式三档：选中行以「勾 + 加粗 + 本色」三重编码，未选中行留位对齐 -->
+    <ContextMenu
+      :open="formatMenu.open"
+      :x="formatMenu.x"
+      :y="formatMenu.y"
+      @close="formatMenu.open = false"
+    >
+      <button
+        v-for="f in FORMAT_FILTERS"
+        :key="f.key"
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-bamboo/10 hover:text-ink"
+        :class="library.formatFilter === f.key ? 'font-medium text-ink' : 'text-ink-soft'"
+        @click="pickFormat(f.key)"
+      >
+        <ZIcon
+          v-if="library.formatFilter === f.key"
+          name="check"
+          :size="14"
+          class="shrink-0"
+          :class="f.mark"
+        />
+        <span v-else class="w-3.5 shrink-0"></span>
+        <span :class="f.mono ? 'font-mono' : ''">{{ f.label }}</span>
       </button>
     </ContextMenu>
 
