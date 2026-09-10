@@ -169,7 +169,7 @@ const STATUS_CLASS: Record<string, string> = {
           <p class="mt-4 text-sm text-ink-soft">
             {{ importing ? COPY.importReading : COPY.importDropHint }}
           </p>
-          <p v-if="!importing" class="mt-1 text-xs text-dusk">.md · .html</p>
+          <p v-if="!importing" class="mt-1 text-xs text-dusk">{{ COPY.importExtHint }}</p>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-3">

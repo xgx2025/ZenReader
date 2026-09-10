@@ -62,6 +62,8 @@ export const COPY = {
   finished: '已读毕',
 
   importDropHint: '引卷于此 —— 拖入 .md / .html 文件',
+  /** 引卷落区副行：可引的卷式。书库与引卷页两处落区共用，勿各写各的。 */
+  importExtHint: '.md · .html',
   importFileAction: '引卷（选择文件）',
   importFolderAction: '拾整卷（选择文件夹）',
   importDone: '已引入',

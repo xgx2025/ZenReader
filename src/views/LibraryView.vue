@@ -696,7 +696,7 @@ onBeforeUnmount(() => {
             <p class="mt-4 font-serif text-lg text-ink">
               {{ COPY.dropToImport }}
             </p>
-            <p class="mt-1 text-xs text-dusk">.md</p>
+            <p class="mt-1 text-xs text-dusk">{{ COPY.importExtHint }}</p>
           </div>
         </div>
       </Transition>
