@@ -420,12 +420,52 @@
     }
   }
 
+  /**
+   * 页内锚点（`#id`）自己接管。
+   *
+   * 宿主注入的 `<base href="zenasset://…/">` 是所有相对 URL 的解析基准——`#hero`
+   * 因此被解析成 `zenasset://…/#hero`：与本文档（about:srcdoc）不同文档，浏览器
+   * 走的是**整帧导航**而非同文档跳转，表现就是"点目录没反应"。base 又删不得
+   * （相对图片/字体/CSS 全靠它落到资产协议上），所以只能在这儿把语义补回来：
+   * 本页找 target 再滚，效果与原生同文档跳转一致。
+   *
+   * 已知不覆盖：靠 `:target` 选择器或 hashchange 事件驱动的目录（真实 fragment
+   * 导航始终没发生）——不透明源里也改不了 location/history。
+   */
+  function jumpToFragment(href) {
+    var id = href.slice(1)
+    try {
+      id = decodeURIComponent(id)
+    } catch (e) {
+      /* 非法转义：按原样找 */
+    }
+    var sc = scrollable()
+    if (!id) {
+      // 光秃秃的 `#`：按链接惯例回卷首，比"什么都不发生"更贴近语义。
+      sc.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    var el = document.getElementById(id)
+    if (!el) {
+      var named = document.getElementsByName(id) // `<a name="…">` 老式锚点
+      if (named && named.length) el = named[0]
+    }
+    if (!el) return // target 不存在 = 原地不动（与原生一致）
+    // 落点让开沉浸式玻璃条：agent 注入的 scroll-padding-top（见 ensureTopInset）。
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   function onDocClick(e) {
     if (e.defaultPrevented || e.button !== 0) return
     var a = e.target && e.target.closest ? e.target.closest('a[href]') : null
     if (!a) return
     var href = a.getAttribute('href') || ''
-    if (!href || href.charAt(0) === '#') return
+    if (!href) return
+    if (href.charAt(0) === '#') {
+      e.preventDefault()
+      jumpToFragment(href)
+      return
+    }
     var url = null
     try {
       url = new URL(href, document.baseURI)
@@ -470,12 +510,18 @@
    * ① CSS 变量 + `html body` 规则（特异性高于作者常写的 `body`，首帧即生效）；
    * ② body 行内样式（压过作者常规规则；body 就绪后再调一次即可命中）。
    * 高亮配色等注入样式仅叠加、不改排版，这条是刻意为之的排版性注入。
+   *
+   * 同时给出 `scroll-padding-top`：锚点跳转（帧内目录、页内 `#id`）落在留白下沿，
+   * 标题不会一头扎进玻璃条底下。页面自己设了 scroll-padding 时以页面的为准——
+   * 本 <style> 早于页面样式落地，同特异性下后者胜。
    */
   function ensureTopInset(px) {
     if (!document.getElementById('zr-top-inset')) {
       var st = document.createElement('style')
       st.id = 'zr-top-inset'
-      st.textContent = 'html body{padding-top:var(--zr-top-inset,0px)}'
+      st.textContent =
+        'html{scroll-padding-top:var(--zr-top-inset,0px)}' +
+        'html body{padding-top:var(--zr-top-inset,0px)}'
       ;(document.head || document.documentElement).appendChild(st)
     }
     var v = px > 0 ? px + 'px' : '0px'
@@ -640,6 +686,7 @@
       start: start,
       route: route,
       applyAnchors: applyAnchors,
+      jumpToFragment: jumpToFragment,
       scrollInfo: scrollInfo,
       outlinePayload: outlinePayload,
       captureSelection: captureSelection,
