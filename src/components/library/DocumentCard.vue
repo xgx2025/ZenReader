@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
-import { folderPathFromRelative, titleFromName } from '@/lib/vault'
+import { folderPathFromRelative, isHtmlFile, titleFromName } from '@/lib/vault'
 import { COPY } from '@/lib/copy'
 import { useProgressStore } from '@/stores/progress'
 import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
@@ -38,6 +38,16 @@ const progressStore = useProgressStore()
 
 const title = computed(() => props.meta?.title ?? titleFromName(props.file.name))
 const folderPath = computed(() => folderPathFromRelative(props.file.relativePath))
+
+/** 卡片形制对两类卷一视同仁，只在页脚缀一枚格式小签：竹青为 md，檀棕为 html。 */
+const isHtml = computed(() => isHtmlFile(props.file.name))
+const formatExt = computed(() =>
+  isHtml.value ? COPY.formatExtHtml : COPY.formatExtMarkdown,
+)
+const formatHint = computed(() =>
+  isHtml.value ? COPY.formatHtmlHint : COPY.formatMdHint,
+)
+
 const mtime = computed(() => {
   const d = new Date(props.file.mtime)
   return d.getTime() ? d.toLocaleDateString('zh-CN') : ''
@@ -182,6 +192,19 @@ const isNewBadge = computed(
             <span>{{ meta.wordCount }} {{ COPY.words }}</span>
             <span>{{ meta.readingTime }} {{ COPY.minutes }}</span>
           </template>
+          <!-- 格式小签：与元信息同族，md 竹青、html 檀棕。
+               描边取己色发丝线、填充极淡，故虽成签而不夺目 -->
+          <span
+            class="shrink-0 rounded-[5px] border px-1.5 py-px font-mono text-[10px] leading-3"
+            :class="
+              isHtml
+                ? 'border-sandal/30 bg-sandal/12 text-sandal'
+                : 'border-bamboo/25 bg-bamboo/10 text-bamboo'
+            "
+            :title="formatHint"
+          >
+            {{ formatExt }}
+          </span>
           <span v-if="mtime" class="ml-auto shrink-0">{{ mtime }}</span>
         </div>
       </div>

@@ -3,7 +3,15 @@ import { computed } from 'vue'
 
 import { COPY } from '@/lib/copy'
 
-const props = defineProps<{ rect: DOMRect | null; visible: boolean }>()
+/** md 传原生 DOMRect；html 沙箱传换算好的父视口矩形——二者结构相同。 */
+export interface RectLike {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+const props = defineProps<{ rect: RectLike | null; visible: boolean }>()
 const emit = defineEmits<{ highlight: []; note: [] }>()
 
 const TOOLBAR_WIDTH = 176

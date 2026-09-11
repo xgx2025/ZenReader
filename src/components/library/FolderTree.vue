@@ -9,11 +9,12 @@ defineProps<{
 
 const emit = defineEmits<{
   select: [path: string]
-  menu: [e: { path: string; x: number; y: number }]
+  /** count 随行带上：调用方据此把非空分组的「释怀」置灰。 */
+  menu: [e: { path: string; count: number; x: number; y: number }]
 }>()
 
 function onMenu(node: FolderNode, e: MouseEvent) {
-  emit('menu', { path: node.path, x: e.clientX, y: e.clientY })
+  emit('menu', { path: node.path, count: node.count, x: e.clientX, y: e.clientY })
 }
 </script>
 
@@ -33,7 +34,7 @@ function onMenu(node: FolderNode, e: MouseEvent) {
         @click="emit('select', node.path)"
       >
         <span class="truncate">{{ node.name }}</span>
-        <span class="text-xs text-dusk">{{ node.count }}</span>
+        <span class="text-xs tabular-nums text-dusk">{{ node.count }}</span>
       </button>
 
       <FolderTree

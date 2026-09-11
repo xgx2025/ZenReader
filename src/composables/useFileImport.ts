@@ -1,13 +1,13 @@
 import { ref } from 'vue'
 
 import { nativeFs } from '@/lib/native'
-import { joinPath, vaultFile, folderPathFromRelative } from '@/lib/vault'
+import { joinPath, vaultFile, folderPathFromRelative, DOC_EXT, isHtmlFile } from '@/lib/vault'
 import { COPY } from '@/lib/copy'
 import { useSettingsStore } from '@/stores/settings'
 import { useLibraryStore } from '@/stores/library'
 import type { ImportItem, ImportResult } from '@/types/import'
 
-/** Only `.md` is imported - the vault scan (read_vault) lists nothing else. */
+/** Only `.md` goes through the UTF-8 text path (existing behaviour, untouched). */
 const MD_EXT = /\.md$/i
 
 async function readFileAsText(file: File): Promise<string> {
@@ -26,21 +26,37 @@ async function readFileAsText(file: File): Promise<string> {
   return text
 }
 
+/** Chunked binary → base64 (spread per chunk avoids stack overflow on big files). */
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf)
+  let bin = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(bin)
+}
+
 /** Relative target within the vault: folder-picked files keep their structure. */
 function relativePathFor(file: File & { webkitRelativePath?: string }): string {
   return file.webkitRelativePath || file.name
 }
 
-/** One file to import: where it lands plus how to read its content. */
+/**
+ * One file to import. `write` knows *how* to land the bytes at the absolute
+ * destination — HTML copies raw bytes (a text round-trip would re-encode e.g.
+ * GBK content while leaving its `<meta charset>` intact, so read_html would
+ * later mis-decode it); `.md` keeps its historical UTF-8 text path.
+ */
 interface ImportEntry {
   fileName: string
   folderPath: string
   relPath: string
-  read: () => Promise<string>
+  write: (destAbs: string) => Promise<void>
 }
 
 /**
- * Copy external `.md` files into the vault - the vault is the source of
+ * Copy external `.md`/`.html` files into the vault - the vault is the source of
  * truth, so "import" now means writing the file onto disk inside it.
  */
 export function useFileImport() {
@@ -50,7 +66,7 @@ export function useFileImport() {
   const items = ref<ImportItem[]>([])
   const importing = ref(false)
 
-  /** Shared write loop: dedupe, read, write into the vault, track per-item status. */
+  /** Shared write loop: dedupe, write into the vault, track per-item status. */
   async function runImport(
     entries: ImportEntry[],
     skippedStart: number,
@@ -71,7 +87,7 @@ export function useFileImport() {
     const errors = errorsStart
 
     for (let i = 0; i < entries.length; i++) {
-      const { relPath, read } = entries[i]
+      const { relPath, write } = entries[i]
       const item = items.value[i]
 
       if (existing.has(relPath)) {
@@ -84,9 +100,8 @@ export function useFileImport() {
 
       item.status = 'reading'
       try {
-        const content = await read()
         item.status = 'saving'
-        await nativeFs.writeFile(vaultFile(settings.vaultPath, relPath), content)
+        await write(vaultFile(settings.vaultPath, relPath))
         item.status = 'done'
         imported++
       } catch (e) {
@@ -107,16 +122,20 @@ export function useFileImport() {
     targetFolder = '',
   ): Promise<ImportResult> {
     const typed = files as (File & { webkitRelativePath?: string })[]
-    const mdFiles = typed.filter((f) => MD_EXT.test(f.name))
-    const skippedByExtension = typed.length - mdFiles.length
+    const docFiles = typed.filter((f) => DOC_EXT.test(f.name))
+    const skippedByExtension = typed.length - docFiles.length
 
-    const entries = mdFiles.map((file) => {
+    const entries = docFiles.map((file) => {
       const relPath = joinPath(targetFolder, relativePathFor(file))
       return {
         fileName: file.name,
         folderPath: folderPathFromRelative(relPath),
         relPath,
-        read: () => readFileAsText(file),
+        // .md 沿用文本路径；.html 按原始字节 base64 落盘。
+        write: isHtmlFile(file.name)
+          ? async (dest: string) =>
+              nativeFs.writeBase64(dest, arrayBufferToBase64(await file.arrayBuffer()))
+          : async (dest: string) => nativeFs.writeFile(dest, await readFileAsText(file)),
       }
     })
 
@@ -124,9 +143,9 @@ export function useFileImport() {
   }
 
   /**
-   * Desktop channel: import by absolute paths (Tauri native drop) - a single
-   * `.md` file comes in as-is, anything else is treated as a folder whose
-   * markdown files are gathered recursively, keeping their structure.
+   * Desktop channel: import by absolute paths (Tauri native drop). A single
+   * `.md`/`.html` file comes in as-is; anything else is treated as a folder
+   * whose supported documents are gathered recursively, keeping structure.
    */
   async function importPaths(
     paths: string[],
@@ -146,10 +165,21 @@ export function useFileImport() {
             fileName: name,
             folderPath: folderPathFromRelative(relPath),
             relPath,
-            read: () => nativeFs.readFile(clean),
+            write: async (dest: string) =>
+              nativeFs.writeFile(dest, await nativeFs.readFile(clean)),
+          })
+        } else if (isHtmlFile(name)) {
+          // 单个 .html 落点按文件导入——绝不能当文件夹递归 readVault（会把本文件当根，
+          // 得出空 relativePath 而误写）。原样字节拷贝进书库。
+          const relPath = joinPath(targetFolder, name)
+          entries.push({
+            fileName: name,
+            folderPath: folderPathFromRelative(relPath),
+            relPath,
+            write: async (dest: string) => nativeFs.copyFile(clean, dest),
           })
         } else {
-          // 非单文件落点视作文件夹：递归扫出其中全部 .md。
+          // 其它落点视作文件夹：递归扫出全部 .md/.html，各按格式保字节。
           const listing = await nativeFs.readVault(clean)
           if (listing.files.length === 0) {
             skipped++
@@ -161,7 +191,10 @@ export function useFileImport() {
               fileName: f.name,
               folderPath: folderPathFromRelative(relPath),
               relPath,
-              read: () => nativeFs.readFile(f.path),
+              write: isHtmlFile(f.name)
+                ? async (dest: string) => nativeFs.copyFile(f.path, dest)
+                : async (dest: string) =>
+                    nativeFs.writeFile(dest, await nativeFs.readFile(f.path)),
             })
           }
         }

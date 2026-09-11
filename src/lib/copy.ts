@@ -51,16 +51,41 @@ export const COPY = {
   words: '字',
   minutes: '分钟',
 
+  // 卡片格式标识：页脚等宽小签，只留扩展名本身，不缀前导点
+  formatExtMarkdown: 'md',
+  formatExtHtml: 'html',
+  formatMdHint: 'Markdown 原稿 · 由禅阅读排版成卷',
+  formatHtmlHint: 'HTML 原样式直读 · 保留原有版式与色彩',
+
+  // 书库卷式筛选（列表页工具栏那枚折叠小签）
+  formatFilter: '卷式',
+  formatFilterAll: '全部',
+  formatFilterHint: '按卷式筛选书库',
+  emptyFormat: '此类尚无卷',
+  // 下钻到某分组而本层无卷。注意与 emptyFolders（全库一个分组都还没有）区分：
+  // 这两个键只差一个复数 s，却是完全不同的处境。
+  emptyFolder: '此分组尚无篇章',
+  emptyFolderNested: '本层无篇章，子分组在左侧',
+  // 下钻时的范围提示行，数字在调用处拼接（单位随之写进文案）：
+  // 「本层 3 篇 · 子分组内另有 16 篇」
+  pieceUnit: '篇',
+  scopeHere: '本层',
+  scopeBelow: '子分组内另有',
+
   resumeReading: '接着上次',
   readingProgress: '读到',
   finished: '已读毕',
 
-  importDropHint: '引卷于此 —— 拖入 .md 文件',
+  importDropHint: '引卷于此 —— 拖入 .md / .html 文件',
+  /** 引卷落区副行：可引的卷式。书库与引卷页两处落区共用，勿各写各的。 */
+  importExtHint: '.md · .html',
   importFileAction: '引卷（选择文件）',
   importFolderAction: '拾整卷（选择文件夹）',
   importDone: '已引入',
   importSkipped: '已略过',
   importTo: '引入到',
+  /** 引卷落库时若卷式筛选正生效，自动复位为「全部」，附此一声说明。 */
+  importFilterCleared: '已重置卷式筛选',
 
   // 更新检查（关于软件更新）
   about: '关于',

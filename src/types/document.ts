@@ -17,12 +17,25 @@ export interface VaultListing {
 }
 
 /**
+ * The two document families ZenReader reads: `.md`/`.markdown` (typeset by
+ * ZenReader) and `.html`/`.htm` (read in their original styling).
+ */
+export type DocumentFormat = 'markdown' | 'html'
+
+/** Library 卷式 lens: one family, or everything. */
+export type FormatFilter = 'all' | DocumentFormat
+
+/**
  * A document rendered for reading — a transient view model built on open
  * by parsing the file's source; not persisted anywhere.
  */
 export interface Document {
   title: string
-  /** Raw markdown including frontmatter — the source of truth on disk. */
+  /** Which renderer serves this document: `.md` renders zen-prose from
+   *  `source`; `.html/.htm` displays the original in a sandboxed iframe. */
+  format: DocumentFormat
+  /** Raw source on disk (markdown including frontmatter, or the HTML bytes
+   *  decoded to text) — the source of truth. */
   source: string
   /** Rendered + sanitized HTML cache for this open session. */
   html: string
@@ -57,6 +70,9 @@ export interface FolderNode {
   name: string
   path: string
   children: FolderNode[]
-  /** Number of files directly under this folder. */
+  /**
+   * 整棵子树内的卷数（递归累计）。让侧栏计数与「寻词时递归所见」一致，且
+   * `count === 0` 恰好等价于后端的可释怀判定（整个子树无文件）。
+   */
   count: number
 }

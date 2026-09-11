@@ -1,16 +1,31 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { nativeFs } from '@/lib/native'
+import { nativeFs, isTauri } from '@/lib/native'
 import { deleteDocumentNotes, moveDocumentNotes } from '@/lib/notesApi'
-import { folderPathFromRelative, resolveTitle, vaultFile } from '@/lib/vault'
+import {
+  docFormatOf,
+  isHtmlFile,
+  resolveHtmlTitle,
+  resolveTitle,
+  vaultFile,
+} from '@/lib/vault'
 import { renderMarkdown } from '@/lib/markdown/parser'
 import { parseFrontmatter } from '@/lib/markdown/frontmatter'
 import { countWords, computeReadingTime, makeExcerpt } from '@/lib/markdown/structure'
+import { extractHtmlText, extractHtmlTitle } from '@/lib/html/text'
 import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
+import {
+  buildFolderTree,
+  collectFolderPaths,
+  findNode,
+  folderScope as scopeOf,
+  inFolderScope,
+  type FolderScope,
+} from '@/lib/folderTree'
 import { customRank, mergeVisibleMove, reconcileCustomOrder } from '@/lib/arrange'
 import {
   flushArrange,
@@ -24,7 +39,7 @@ import {
   type ArrangeSortMode,
   type DisplayMode,
 } from '@/types/arrange'
-import type { VaultFile, FolderNode } from '@/types/document'
+import type { FormatFilter, VaultFile, FolderNode } from '@/types/document'
 
 /** Progressive-index metadata for a single file, filled in lazily. */
 export interface IndexedMeta {
@@ -38,56 +53,6 @@ export interface IndexedMeta {
   mtime: number
 }
 
-function collectFolderPaths(nodes: FolderNode[], acc: string[]): void {
-  for (const n of nodes) {
-    acc.push(n.path)
-    collectFolderPaths(n.children, acc)
-  }
-}
-
-function sortNodes(nodes: FolderNode[]): void {
-  nodes.sort((a, b) => a.name.localeCompare(b.name, 'zh'))
-  for (const n of nodes) sortNodes(n.children)
-}
-
-export function buildFolderTree(files: VaultFile[], dirs: string[]): FolderNode[] {
-  const root: FolderNode[] = []
-  const map = new Map<string, FolderNode>()
-
-  const ensureNode = (path: string): FolderNode => {
-    let node = map.get(path)
-    if (node) return node
-    const name = path.split('/').pop() ?? path
-    node = { name, path, children: [], count: 0 }
-    map.set(path, node)
-    return node
-  }
-
-  // Establish all directory nodes first, so empty folders still show up.
-  for (const dir of dirs) {
-    const parts = dir.split('/').filter(Boolean)
-    let siblings = root
-    let currentPath = ''
-    for (const part of parts) {
-      currentPath = currentPath ? `${currentPath}/${part}` : part
-      const node = ensureNode(currentPath)
-      if (!siblings.includes(node)) siblings.push(node)
-      siblings = node.children
-    }
-  }
-
-  // Count files directly under each folder.
-  for (const f of files) {
-    const folder = folderPathFromRelative(f.relativePath)
-    if (!folder) continue
-    const node = ensureNode(folder)
-    node.count += 1
-  }
-
-  sortNodes(root)
-  return root
-}
-
 export const useLibraryStore = defineStore('library', () => {
   const settings = useSettingsStore()
 
@@ -98,6 +63,8 @@ export const useLibraryStore = defineStore('library', () => {
   const index = ref<Record<string, IndexedMeta>>({})
   const search = ref('')
   const selectedFolder = ref('')
+  /** 卷式筛选（全部/md/html）；与 search 同为会话态，不落盘。 */
+  const formatFilter = ref<FormatFilter>('all')
   const loading = ref(false)
 
   // —— 拖动排序（手动排布）：展示顺序的状态 + 持久化接线 ——
@@ -147,18 +114,28 @@ export const useLibraryStore = defineStore('library', () => {
 
   const totalCount = computed(() => files.value.length)
 
-  const filtered = computed<VaultFile[]>(() => {
-    let list = files.value
+  /**
+   * 卷式过滤后的全库列表。`filtered` 的第一道谓词（最廉，先过一遍），
+   * 也作范围提示行的基准——数字要与用户接下来看到的一致。
+   */
+  const formatFiltered = computed<VaultFile[]>(() => {
+    if (formatFilter.value === 'all') return files.value
+    const want = formatFilter.value
+    return files.value.filter((f) => docFormatOf(f.name) === want)
+  })
 
+  const filtered = computed<VaultFile[]>(() => {
+    let list = formatFiltered.value
+
+    // 分组分支需要先知道是否在寻词，故 q 提到它之前算。
+    const q = search.value.trim().toLowerCase()
+
+    // 寻词即递归，否则下钻到本层。空路径（书库根）恒真——根就是整个书库，保持全量。
     if (selectedFolder.value) {
-      const prefix = `${selectedFolder.value}/`
-      list = list.filter((f) => {
-        const folder = folderPathFromRelative(f.relativePath)
-        return folder === selectedFolder.value || folder.startsWith(prefix)
-      })
+      const folder = selectedFolder.value
+      list = list.filter((f) => inFolderScope(f.relativePath, folder, !!q))
     }
 
-    const q = search.value.trim().toLowerCase()
     if (q) {
       list = list.filter((f) => {
         const meta = index.value[f.relativePath]
@@ -192,11 +169,22 @@ export const useLibraryStore = defineStore('library', () => {
   )
 
   /** Every folder path in the vault, flattened (for "move to" picking). */
-  const flatFolders = computed<string[]>(() => {
-    const acc: string[] = []
-    collectFolderPaths(folderTree.value, acc)
-    return acc
-  })
+  const flatFolders = computed<string[]>(() => collectFolderPaths(folderTree.value))
+
+  /** 当前选中分组的子分组（无选中或无子分组时为空）——空态文案据它分辨「本层空」。 */
+  const selectedChildren = computed<FolderNode[]>(
+    () => findNode(folderTree.value, selectedFolder.value)?.children ?? [],
+  )
+
+  /**
+   * 当前分组的作用域拆分（本层 / 子树其余），按卷式过滤但**不受寻词影响**——
+   * 提示行的职责是解释「下钻后另外那些卷去哪了」，寻词时列表本就递归，无需解释。
+   */
+  const folderScope = computed<FolderScope>(() =>
+    selectedFolder.value
+      ? scopeOf(formatFiltered.value, selectedFolder.value)
+      : { here: 0, below: 0 },
+  )
 
   async function refresh() {
     if (!hasVault.value) {
@@ -212,6 +200,9 @@ export const useLibraryStore = defineStore('library', () => {
     try {
       const listing = await nativeFs.readVault(path)
       if (settings.vaultPath !== path) return // 读盘期间已换库/清库：丢弃这次结果
+      // HTML 原样式直读的 zenasset:// 资产按"活跃书库根"收敛——开库/刷新即上报
+      // 一次（fire-and-forget 兜底；reader.open 每次打开也防御性上报）。浏览器 dev 空操作。
+      if (isTauri()) void nativeFs.setActiveVault(path).catch(() => {})
       // 首次开库：从 .zenreader/arrange.json 载入该库自定义序（浏览器 dev 退化读
       // localStorage）。此后同库反复 refresh 沿用内存态——文件只是重启后的入口，
       // 刷新途中不重复读盘，也不让旧文件盖掉刚排好还没落盘的新序。
@@ -345,12 +336,22 @@ export const useLibraryStore = defineStore('library', () => {
       // mtime 未变即内容未变，直接沿用已有索引。
       if (index.value[f.relativePath]?.mtime === f.mtime) continue
       try {
-        const source = await nativeFs.readFile(f.path)
-        const { data, content } = parseFrontmatter(source)
-        const { plainText } = renderMarkdown(content)
+        const isHtml = isHtmlFile(f.name)
+        const source = isHtml
+          ? await nativeFs.readHtml(f.path) // GBK/meta-charset 感知
+          : await nativeFs.readFile(f.path)
+        // .html 的"正文"来自 DOMParser 静态抽取——脚本不执行，索引安全；
+        // .md 仍走 frontmatter + markdown-it 渲染。标题规则统一落到
+        // titleFromName / resolveHtmlTitle（前文 vault 单测覆盖）。
+        const fm = isHtml ? { data: {}, content: source } : parseFrontmatter(source)
+        const plainText = isHtml
+          ? extractHtmlText(source)
+          : renderMarkdown(fm.content).plainText
         const wordCount = countWords(plainText)
         index.value[f.relativePath] = {
-          title: resolveTitle(data, f.name),
+          title: isHtml
+            ? resolveHtmlTitle(extractHtmlTitle(source), f.name)
+            : resolveTitle(fm.data, f.name),
           excerpt: makeExcerpt(plainText),
           fullText: plainText,
           wordCount,
@@ -370,12 +371,15 @@ export const useLibraryStore = defineStore('library', () => {
     index,
     search,
     selectedFolder,
+    formatFilter,
     loading,
     hasVault,
     totalCount,
     filtered,
     folderTree,
     flatFolders,
+    selectedChildren,
+    folderScope,
     // 拖动排序（手动排布）
     displayMode,
     customOrder,
