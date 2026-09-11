@@ -62,6 +62,15 @@ export const COPY = {
   formatFilterAll: '全部',
   formatFilterHint: '按卷式筛选书库',
   emptyFormat: '此类尚无卷',
+  // 下钻到某分组而本层无卷。注意与 emptyFolders（全库一个分组都还没有）区分：
+  // 这两个键只差一个复数 s，却是完全不同的处境。
+  emptyFolder: '此分组尚无篇章',
+  emptyFolderNested: '本层无篇章，子分组在左侧',
+  // 下钻时的范围提示行，数字在调用处拼接（单位随之写进文案）：
+  // 「本层 3 篇 · 子分组内另有 16 篇」
+  pieceUnit: '篇',
+  scopeHere: '本层',
+  scopeBelow: '子分组内另有',
 
   resumeReading: '接着上次',
   readingProgress: '读到',

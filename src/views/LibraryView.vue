@@ -17,6 +17,7 @@ import { useToast } from '@/composables/useToast'
 import { useCardArrange } from '@/composables/useCardArrange'
 import { customRank } from '@/lib/arrange'
 import { COPY } from '@/lib/copy'
+import { folderCrumbs } from '@/lib/folderTree'
 import { folderPathFromRelative } from '@/lib/vault'
 import type { ThemeName } from '@/types/settings'
 import type { FormatFilter, VaultFile } from '@/types/document'
@@ -120,15 +121,23 @@ function closeMenu() {
 }
 
 // 分组操作：右击侧栏分组 → 释怀（仅空分组可删）。
-const folderMenu = ref<{ open: boolean; x: number; y: number; path: string }>({
+const folderMenu = ref<{
+  open: boolean
+  x: number
+  y: number
+  path: string
+  /** 该分组整棵子树的卷数；> 0 即后端必然拒绝释怀，据此前置置灰。 */
+  count: number
+}>({
   open: false,
   x: 0,
   y: 0,
   path: '',
+  count: 0,
 })
 
-function openFolderMenu(e: { path: string; x: number; y: number }) {
-  folderMenu.value = { open: true, x: e.x, y: e.y, path: e.path }
+function openFolderMenu(e: { path: string; count: number; x: number; y: number }) {
+  folderMenu.value = { open: true, x: e.x, y: e.y, path: e.path, count: e.count }
 }
 
 function closeFolderMenu() {
@@ -136,13 +145,15 @@ function closeFolderMenu() {
 }
 
 async function onRemoveFolder() {
-  const path = folderMenu.value.path
+  const { path, count } = folderMenu.value
   closeFolderMenu()
-  if (!path) return
+  if (!path || count > 0) return
   try {
     await library.removeFolder(path)
     notify(COPY.folderRemoved, 'bamboo')
   } catch {
+    // 兜底：read_vault 只报 .md/.html/.htm 且跳过隐藏目录，而后端对**任何**文件
+    // 都拒绝——一个只含 cover.png 的分组会显示 0 却删不掉，UI 无从预判。
     notify(COPY.folderNotEmpty, 'sandal')
   }
 }
@@ -286,11 +297,36 @@ const gridKey = computed(() =>
     : `folder:${library.selectedFolder || '__root__'}:${library.formatFilter}`,
 )
 
-/** 空网格的缘由：先答「寻」、再答「卷式」，与 store 里谓词的次序一致。 */
+/**
+ * 空网格的缘由：先答「寻」、再答「卷式」、最后答「分组为空」。
+ *
+ * 这个次序**刻意不同于** store 里谓词的次序（卷式 → 分组 → 寻词）：文案回答的是
+ * 「用户最可能因为什么看到空」，而非谓词谁先谁后。但卷式必须压在分组之前——某分组
+ * 有 3 篇 .md 而卷式选的是 html 时，成因是筛选器，说「此分组尚无篇章」就是撒谎。
+ */
 const emptyMessage = computed(() => {
   if (library.search.trim()) return COPY.emptySearch
   if (library.formatFilter !== 'all') return COPY.emptyFormat
-  return COPY.emptySearch
+  if (library.selectedFolder) {
+    // 有子分组时指个路，否则下钻模型会让人以为内容丢了。
+    return library.selectedChildren.length ? COPY.emptyFolderNested : COPY.emptyFolder
+  }
+  return COPY.emptySearch // 已不可达（全空由 files.length === 0 先接住），纯防御
+})
+
+/** 面包屑：仅选中分组时非空，为空即整行不渲染。 */
+const crumbs = computed(() => folderCrumbs(library.selectedFolder))
+
+/**
+ * 下钻模型必然引出的疑问是「另外那些卷去哪了」——范围行正面回答它。
+ * 寻词时列表本就递归，无需再解释；无子分组时也不必（空态文案已说清）。
+ */
+const scopeHint = computed(() => {
+  if (!library.selectedFolder) return ''
+  if (library.search.trim()) return ''
+  if (!library.selectedChildren.length) return ''
+  const { here, below } = library.folderScope
+  return `${COPY.scopeHere} ${here} ${COPY.pieceUnit} · ${COPY.scopeBelow} ${below} ${COPY.pieceUnit}`
 })
 
 const { drag, onPick, cancelDrag } = useCardArrange({
@@ -468,7 +504,7 @@ onBeforeUnmount(() => {
             <ZIcon name="library" :size="14" class="shrink-0 text-bamboo/70" />
             {{ COPY.library }}
           </span>
-          <span class="text-xs text-dusk">{{ library.totalCount }}</span>
+          <span class="text-xs tabular-nums text-dusk">{{ library.totalCount }}</span>
         </button>
 
         <div class="mb-2">
@@ -524,7 +560,10 @@ onBeforeUnmount(() => {
       </aside>
 
       <main ref="mainRef" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
-        <div class="mb-6 flex flex-wrap items-center gap-3">
+        <div
+          class="flex flex-wrap items-center gap-3"
+          :class="crumbs.length ? 'mb-3' : 'mb-6'"
+        >
           <div
             class="relative min-w-0 max-w-md flex-1 transition-opacity duration-300"
             :class="arranging ? 'pointer-events-none opacity-50' : ''"
@@ -618,6 +657,52 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
+        <!-- 位置与范围：仅在选中分组时现身。侧栏高亮在拖动排序中会淡到 opacity-40，
+             此条恰是那时唯一的方向标，故保留可见——但必须不可点：可点的话
+             selectedFolder 会在 arrangePaths 仍持旧可见集时改变，而过期序列要等到
+             落子或文件集变动才会被清掉。 -->
+        <div
+          v-if="crumbs.length"
+          class="mb-5 flex min-w-0 items-center gap-3 text-xs transition-opacity duration-300"
+          :class="arranging ? 'pointer-events-none opacity-50' : ''"
+        >
+          <nav aria-label="分组路径" class="flex min-w-0 items-center gap-0.5">
+            <button
+              class="shrink-0 rounded-md px-1.5 py-0.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+              @click="library.selectedFolder = ''"
+            >
+              {{ COPY.library }}
+            </button>
+            <template v-for="(c, i) in crumbs" :key="c.path">
+              <ZIcon
+                name="chevron-right"
+                :size="12"
+                class="shrink-0 text-dusk/60"
+              />
+              <!-- 祖先可点即「上一层」，故无需另设返回按钮 -->
+              <button
+                v-if="i < crumbs.length - 1"
+                class="min-w-0 rounded-md px-1.5 py-0.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+                :title="c.path"
+                @click="library.selectedFolder = c.path"
+              >
+                <span class="block truncate">{{ c.name }}</span>
+              </button>
+              <span
+                v-else
+                class="min-w-0 rounded-md px-1.5 py-0.5 font-medium text-ink"
+                :title="c.path"
+              >
+                <span class="block truncate">{{ c.name }}</span>
+              </span>
+            </template>
+          </nav>
+
+          <span v-if="scopeHint" class="ml-auto shrink-0 tabular-nums text-dusk">
+            {{ scopeHint }}
+          </span>
+        </div>
+
         <!-- 拖动排序引导条 -->
         <div
           v-if="arranging"
@@ -708,12 +793,32 @@ onBeforeUnmount(() => {
       :y="folderMenu.y"
       @close="closeFolderMenu"
     >
+      <!-- 非空分组置灰：后端对整棵子树要求无文件，「点了必然失败」不如一看就懂。
+           缘由**就近写在按钮里**而非挂 title——disabled 元素在 WebView2 里收不到
+           指针事件，tooltip 根本不会弹出，写了等于没写。 -->
       <button
-        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        class="flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-bamboo/10 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        :class="
+          folderMenu.count > 0 ? 'text-dusk' : 'text-ink-soft hover:text-ink'
+        "
+        :disabled="folderMenu.count > 0"
         @click="onRemoveFolder"
       >
-        <ZIcon name="delete" :size="15" class="shrink-0 text-sandal" />
-        {{ COPY.removeFolder }}
+        <ZIcon
+          name="delete"
+          :size="15"
+          class="mt-0.5 shrink-0"
+          :class="folderMenu.count > 0 ? 'text-sandal/40' : 'text-sandal'"
+        />
+        <span class="flex min-w-0 flex-col text-left">
+          <span>{{ COPY.removeFolder }}</span>
+          <span
+            v-if="folderMenu.count > 0"
+            class="mt-0.5 text-[11px] leading-snug text-dusk"
+          >
+            {{ COPY.folderNotEmpty }}
+          </span>
+        </span>
       </button>
     </ContextMenu>
 

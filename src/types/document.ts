@@ -70,6 +70,9 @@ export interface FolderNode {
   name: string
   path: string
   children: FolderNode[]
-  /** Number of files directly under this folder. */
+  /**
+   * 整棵子树内的卷数（递归累计）。让侧栏计数与「寻词时递归所见」一致，且
+   * `count === 0` 恰好等价于后端的可释怀判定（整个子树无文件）。
+   */
   count: number
 }

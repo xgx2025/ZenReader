@@ -31,6 +31,7 @@ export type IconName =
   | 'figure'
   | 'keyboard'
   | 'chevron-down'
+  | 'chevron-right'
   | 'check'
   | 'about'
   | 'library'
@@ -82,6 +83,8 @@ const ICONS: Record<IconName, string> = {
   keyboard:
     '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01"/><path d="M10 9h.01"/><path d="M14 9h.01"/><path d="M18 9h.01"/><path d="M6 13h.01"/><path d="M10 13h.01"/><path d="M14 13h.01"/><path d="M18 13h.01"/><path d="M8 16h8"/>',
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  // 面包屑分隔：同 chevron-down 的笔画，转 90°。
+  'chevron-right': '<path d="m9 6 6 6-6 6"/>',
   // 菜单选中行的小勾
   check: '<path d="m5 12 5 5 9-9"/>',
   about: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 11v5"/>',

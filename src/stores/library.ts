@@ -5,7 +5,6 @@ import { nativeFs, isTauri } from '@/lib/native'
 import { deleteDocumentNotes, moveDocumentNotes } from '@/lib/notesApi'
 import {
   docFormatOf,
-  folderPathFromRelative,
   isHtmlFile,
   resolveHtmlTitle,
   resolveTitle,
@@ -19,6 +18,14 @@ import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
+import {
+  buildFolderTree,
+  collectFolderPaths,
+  findNode,
+  folderScope as scopeOf,
+  inFolderScope,
+  type FolderScope,
+} from '@/lib/folderTree'
 import { customRank, mergeVisibleMove, reconcileCustomOrder } from '@/lib/arrange'
 import {
   flushArrange,
@@ -44,56 +51,6 @@ export interface IndexedMeta {
   readingTime: number
   /** 索引时的文件修改时间：刷新时相同则沿用，不再重复解析。 */
   mtime: number
-}
-
-function collectFolderPaths(nodes: FolderNode[], acc: string[]): void {
-  for (const n of nodes) {
-    acc.push(n.path)
-    collectFolderPaths(n.children, acc)
-  }
-}
-
-function sortNodes(nodes: FolderNode[]): void {
-  nodes.sort((a, b) => a.name.localeCompare(b.name, 'zh'))
-  for (const n of nodes) sortNodes(n.children)
-}
-
-export function buildFolderTree(files: VaultFile[], dirs: string[]): FolderNode[] {
-  const root: FolderNode[] = []
-  const map = new Map<string, FolderNode>()
-
-  const ensureNode = (path: string): FolderNode => {
-    let node = map.get(path)
-    if (node) return node
-    const name = path.split('/').pop() ?? path
-    node = { name, path, children: [], count: 0 }
-    map.set(path, node)
-    return node
-  }
-
-  // Establish all directory nodes first, so empty folders still show up.
-  for (const dir of dirs) {
-    const parts = dir.split('/').filter(Boolean)
-    let siblings = root
-    let currentPath = ''
-    for (const part of parts) {
-      currentPath = currentPath ? `${currentPath}/${part}` : part
-      const node = ensureNode(currentPath)
-      if (!siblings.includes(node)) siblings.push(node)
-      siblings = node.children
-    }
-  }
-
-  // Count files directly under each folder.
-  for (const f of files) {
-    const folder = folderPathFromRelative(f.relativePath)
-    if (!folder) continue
-    const node = ensureNode(folder)
-    node.count += 1
-  }
-
-  sortNodes(root)
-  return root
 }
 
 export const useLibraryStore = defineStore('library', () => {
@@ -157,24 +114,28 @@ export const useLibraryStore = defineStore('library', () => {
 
   const totalCount = computed(() => files.value.length)
 
+  /**
+   * 卷式过滤后的全库列表。`filtered` 的第一道谓词（最廉，先过一遍），
+   * 也作范围提示行的基准——数字要与用户接下来看到的一致。
+   */
+  const formatFiltered = computed<VaultFile[]>(() => {
+    if (formatFilter.value === 'all') return files.value
+    const want = formatFilter.value
+    return files.value.filter((f) => docFormatOf(f.name) === want)
+  })
+
   const filtered = computed<VaultFile[]>(() => {
-    let list = files.value
+    let list = formatFiltered.value
 
-    // 卷式最廉，先过一遍：后续分组/全文谓词只需处理命中本式的那批。
-    if (formatFilter.value !== 'all') {
-      const want = formatFilter.value
-      list = list.filter((f) => docFormatOf(f.name) === want)
-    }
-
-    if (selectedFolder.value) {
-      const prefix = `${selectedFolder.value}/`
-      list = list.filter((f) => {
-        const folder = folderPathFromRelative(f.relativePath)
-        return folder === selectedFolder.value || folder.startsWith(prefix)
-      })
-    }
-
+    // 分组分支需要先知道是否在寻词，故 q 提到它之前算。
     const q = search.value.trim().toLowerCase()
+
+    // 寻词即递归，否则下钻到本层。空路径（书库根）恒真——根就是整个书库，保持全量。
+    if (selectedFolder.value) {
+      const folder = selectedFolder.value
+      list = list.filter((f) => inFolderScope(f.relativePath, folder, !!q))
+    }
+
     if (q) {
       list = list.filter((f) => {
         const meta = index.value[f.relativePath]
@@ -208,11 +169,22 @@ export const useLibraryStore = defineStore('library', () => {
   )
 
   /** Every folder path in the vault, flattened (for "move to" picking). */
-  const flatFolders = computed<string[]>(() => {
-    const acc: string[] = []
-    collectFolderPaths(folderTree.value, acc)
-    return acc
-  })
+  const flatFolders = computed<string[]>(() => collectFolderPaths(folderTree.value))
+
+  /** 当前选中分组的子分组（无选中或无子分组时为空）——空态文案据它分辨「本层空」。 */
+  const selectedChildren = computed<FolderNode[]>(
+    () => findNode(folderTree.value, selectedFolder.value)?.children ?? [],
+  )
+
+  /**
+   * 当前分组的作用域拆分（本层 / 子树其余），按卷式过滤但**不受寻词影响**——
+   * 提示行的职责是解释「下钻后另外那些卷去哪了」，寻词时列表本就递归，无需解释。
+   */
+  const folderScope = computed<FolderScope>(() =>
+    selectedFolder.value
+      ? scopeOf(formatFiltered.value, selectedFolder.value)
+      : { here: 0, below: 0 },
+  )
 
   async function refresh() {
     if (!hasVault.value) {
@@ -406,6 +378,8 @@ export const useLibraryStore = defineStore('library', () => {
     filtered,
     folderTree,
     flatFolders,
+    selectedChildren,
+    folderScope,
     // 拖动排序（手动排布）
     displayMode,
     customOrder,
