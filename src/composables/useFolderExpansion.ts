@@ -79,7 +79,7 @@ export function useFolderExpansion(): {
   isExpanded: (path: string) => boolean
   toggle: (path: string) => void
   reveal: (path: string) => void
-  toggleRoot: () => void
+  setRoot: (open: boolean) => void
   rekey: (from: string, to: string) => void
 } {
   const settings = useSettingsStore()
@@ -104,8 +104,12 @@ export function useFolderExpansion(): {
     }
   }
 
-  function toggleRoot(): void {
-    setKey(TREE_ROOT_KEY, !(expanded.value[TREE_ROOT_KEY] !== false))
+  /**
+   * 设定根层的开合（第十轮：区带菜单的「收起 / 展开全部分组」要的是**设定**，
+   * 不是翻转——菜单点「收起」时若当前恰好已收起，翻转会把它展开）。
+   */
+  function setRoot(open: boolean): void {
+    setKey(TREE_ROOT_KEY, open)
   }
 
   /**
@@ -133,7 +137,7 @@ export function useFolderExpansion(): {
     isExpanded,
     toggle,
     reveal,
-    toggleRoot,
+    setRoot,
     rekey,
   }
 }

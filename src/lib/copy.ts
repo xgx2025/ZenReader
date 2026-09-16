@@ -179,9 +179,12 @@ export const COPY = {
   /** 分组行的完整提示：拼「共 2 篇 · 本层 1 篇」。 */
   folderCountAll: '共',
   folderCountHere: '本层',
-  /** 侧栏「分组」区带的小标题：分组是书库下的第二区，先有区带再谈条目。 */
+  /** 侧栏「分组」区带的小标题：分组是书库下的第二区，先有区带再谈条目。
+      第十轮起这一行只是标签 + ＋：全收 / 全开退到它的右键菜单，不在行上常驻。 */
   groupSection: '分组',
-  /** 折页全开 / 全收（区带头部那两枚）。 */
+  /** 区带标题的提示：Alt+点击是右键菜单那两条动作的快捷路。 */
+  folderFoldAllHint: 'Alt+点击：收起 / 展开全部分组（右键同此）',
+  /** 折页全开 / 全收（区带右键菜单那两条）。 */
   folderExpandAll: '展开全部分组',
   folderCollapseAll: '收起全部分组',
   /** 下钻后回书库根：侧栏「书库」行与主区面包屑共用同一句话。 */
@@ -255,7 +258,9 @@ export const COPY = {
   zenExhale: '呼',
   zenSkipHint: '轻触任意处 · 跳过',
   emptyToc: '卷中尚无章节',
-  emptyFolders: '尚无分组',
+  emptyFolders: '尚无分组 · 点 ＋ 建一个',
+  /** 分组被「收起全部」收掉了：不能与 emptyFolders 混为一句话，否则是在撒谎。 */
+  foldersFolded: '分组已收起 · 右键「分组」可展开',
 
   // 导入状态流转
   importPending: '待引',

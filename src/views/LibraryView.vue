@@ -74,8 +74,9 @@ function onSortClick(key: SortKey) {
 //
 // 「选中」与「展开」刻意分开：点行名只选中（不再「点自己回书库」——那会静默丢掉
 // 位置），点折页只开合（收起内含当前选中的分组时，主区内容也不跟着变）。取消选中
-// 只有两个出口：「书库」行与面包屑。
-const { expanded, rootExpanded, isExpanded, toggle: toggleExpand, reveal, toggleRoot, rekey: rekeyExpanded } =
+// 「取消选中」只有两个出口：「书库」行与面包屑。区带标题那一行**不再是开关**
+// （第十轮）：全收 / 全开是两条动作，落在它的右键菜单里。
+const { expanded, rootExpanded, isExpanded, toggle: toggleExpand, reveal, setRoot, rekey: rekeyExpanded } =
   useFolderExpansion()
 
 /** 展平后的可见行：键盘上下移动、role="tree" 的层级都只需在这一条序列上做。 */
@@ -297,6 +298,35 @@ function openFolderMenu(e: { path: string; count: number; x: number; y: number }
 
 function closeFolderMenu() {
   folderMenu.value.open = false
+}
+
+// 区带菜单：「收起 / 展开全部分组」两条动作。第十轮把它们从区带标题那一行撤下来
+// （那一行原先整行就是这枚开关，见模板注释），落进右键菜单——与分组行的「重命名 /
+// 释怀」同一处，用户不必再学第二种入口。Alt+点击标签是这两条的快捷路。
+//
+// 菜单挂在这一整行上（不只是「分组」二字）：标题行本就是一片空白，拿它当命中区
+// 比让人瞄准两个字容易。**子元素那层不能 .stop**——右键得冒到这一行才唤得出菜单
+// （踩过一次：标签上挂了 @contextmenu.stop，菜单再也开不出来，而合成事件直接打在
+// 行上照样「通过」，只有真鼠标探针看得见）。
+const sectionMenu = ref({ open: false, x: 0, y: 0 })
+
+function openSectionMenu(e: MouseEvent) {
+  if (!library.folderTree.length) return // 没有分组，这两条动作无从谈起
+  sectionMenu.value = { open: true, x: e.clientX, y: e.clientY }
+}
+
+/** Alt+点击标签：不必走菜单就能折叠/展开全部。其余点击一概不理（标签不是按钮）。 */
+function onSectionLabelClick(e: MouseEvent) {
+  if (!e.altKey || !library.folderTree.length) return
+  e.preventDefault()
+  foldAll(!rootExpanded.value)
+}
+
+/** 全收 / 全开：设定根层开合，菜单点完即关，并把结果念给读屏。 */
+function foldAll(expandedNext: boolean) {
+  setRoot(expandedNext)
+  sectionMenu.value.open = false
+  ariaMessage.value = expandedNext ? COPY.folderExpandAll : COPY.folderCollapseAll
 }
 
 // —— 分组改名：行内输入，原地改，不弹窗 ——
@@ -1038,23 +1068,27 @@ onBeforeUnmount(() => {
           </button>
 
           <!-- 区带二 · 分组。区带标题与条目同栅格、同起笔线，只是矮一档、小一号：
-               它是标签而非条目，故不与下面的分组名争重心。收起整棵树的折页挂在这里
-               （全收是对整区做的事），新建的 ＋ 落在尾列。 -->
+               标签而非条目，故不与下面的分组名争重心。
+
+               **这一行不再挂「全收 / 全开」开关**（第十轮）。第九轮把整行做成那枚开关，
+               用起来才发现开关本身不该常驻：它管的是「整份分组列表的可见性」，而这份
+               列表正是侧栏的全部内容——收起它不解决任何事（要找的是分组，不是把分组
+               藏起来），却把 32px 的行变成了行级按钮，还得靠一枚折页解释状态。全收 /
+               全开退成两条**动作**，落在这一行的右键菜单里（Alt+点击标签是它的快捷
+               路，见 onSectionKey）。于是这一行只剩两样东西：标签与 ＋。 -->
           <div class="side-section">
-            <div class="side-head">
-              <button
-                v-if="library.folderTree.length"
-                type="button"
-                class="side-cv side-head-toggle"
-                :title="rootExpanded ? COPY.folderCollapseAll : COPY.folderExpandAll"
-                :aria-label="rootExpanded ? COPY.folderCollapseAll : COPY.folderExpandAll"
-                :aria-expanded="rootExpanded"
-                @click="toggleRoot"
+            <div class="side-head" @contextmenu.stop.prevent="openSectionMenu($event)">
+              <!-- Alt+点击标签＝收起 / 展开全部：菜单那两条动作的快捷路，写进 title。
+                   右键**不要**在这里 .stop——它得冒到这一行上去唤区带菜单
+                   （踩过一次：标签上挂 .stop 之后菜单再也开不出来）。 -->
+              <h2
+                class="side-name side-title side-head-label truncate"
+                :title="COPY.folderFoldAllHint"
+                @click="onSectionLabelClick"
               >
-                <ZIcon name="chevron-down" :size="12" :stroke-width="1.4" class="folder-chevron" />
-              </button>
-              <span v-else class="side-cv"></span>
-              <h2 class="side-name side-title truncate">{{ COPY.groupSection }}</h2>
+                {{ COPY.groupSection }}
+              </h2>
+
               <button
                 v-if="!creating"
                 type="button"
@@ -1104,8 +1138,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <!-- 判据是**可见行**而不是树里有没有分组：全收之后树仍在（13 个分组一条不少），
+               只是行序列空了——用 `library.folderTree.length` 会把「收起来了」当成
+               「一切正常」，于是整区只剩标签 + ＋ 一片空白，用户看不出发生了什么。 -->
           <FolderTree
-            v-if="library.folderTree.length"
+            v-if="folderRows.length"
             :rows="folderRows"
             :selected="library.selectedFolder"
             :expanded="expanded"
@@ -1132,13 +1169,19 @@ onBeforeUnmount(() => {
             @rename-cancel="cancelRename"
             @row-pointer-down="onRowPointerDown"
           />
+          <!-- 空着的这一区有两种缘由，不能混为一句话：
+               · 全收之后没有可见行——「尚无分组 · 点 ＋ 建一个」就是撒谎（库里有分组），
+                 得说清「收起来了」并指回那枚开关；
+               · 真的一个分组都没有——这才说「点 ＋ 建一个」。
+               缩进到名称起笔线，好让它读起来像「这一区里现在还空着」，而不是另一块居中文案。 -->
           <p
             v-else
-            class="flex flex-col items-center px-2.5 py-4 text-xs text-dusk"
+            class="side-empty flex flex-col items-start gap-2 py-3 pl-1.5 text-xs text-dusk"
           >
             <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
-            <span class="mt-3">{{ COPY.emptyFolders }}</span>
-          </p>
+            <span>
+              {{ library.folderTree.length ? COPY.foldersFolded : COPY.emptyFolders }}
+            </span>          </p>
         </div>
 
         <!-- 导入落点提示：新卷落在哪个分组里，原来的侧栏无从知道 -->
@@ -1446,6 +1489,46 @@ onBeforeUnmount(() => {
             {{ COPY.folderNotEmpty }}
           </span>
         </span>
+      </button>
+    </ContextMenu>
+
+    <!-- 区带 · 分组：整区开合的两条动作。它们原先长在区带标题那一行上（那行整行
+         是一枚开关），第十轮撤下来放进这里：开关管的是「整份分组列表的可见性」，
+         而这份列表正是侧栏的全部内容——收起它不解决任何事，却要一行常驻按钮去换。
+         已处于目标状态的那一条置灰：不是「不能点」，是「点了也没变化」。 -->
+    <ContextMenu
+      :open="sectionMenu.open"
+      :x="sectionMenu.x"
+      :y="sectionMenu.y"
+      @close="sectionMenu.open = false"
+    >
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-bamboo/10 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        :class="rootExpanded ? 'text-ink-soft hover:text-ink' : 'text-dusk'"
+        :disabled="!rootExpanded"
+        @click="foldAll(false)"
+      >
+        <ZIcon
+          name="chevron-right"
+          :size="15"
+          class="shrink-0"
+          :class="rootExpanded ? 'text-bamboo' : 'text-dusk/50'"
+        />
+        {{ COPY.folderCollapseAll }}
+      </button>
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-bamboo/10 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        :class="rootExpanded ? 'text-dusk' : 'text-ink-soft hover:text-ink'"
+        :disabled="rootExpanded"
+        @click="foldAll(true)"
+      >
+        <ZIcon
+          name="chevron-down"
+          :size="15"
+          class="shrink-0"
+          :class="rootExpanded ? 'text-dusk/50' : 'text-bamboo'"
+        />
+        {{ COPY.folderExpandAll }}
       </button>
     </ContextMenu>
 

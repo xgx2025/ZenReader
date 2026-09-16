@@ -11,6 +11,7 @@
  *   --expanded=<JSON>  预置侧栏展开态，例如 '{"MySQL/日志":false}'
  *   --script=<js>      截图前在页面里执行的表达式（可 import 同目录的 js）
  *   --after=           --script 之后再等多久（默认 700）
+ *   --hover=<选择器>   截图前把真实指针移到该元素中心（`:hover` 只有真指针认）
  *   --clip=x,y,w,h     只截这块区域
  *   --fullpage=1       截整页
  *
@@ -26,6 +27,8 @@ import { dirname, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { setExpansionState } from './expansionState.mjs'
+
 const CHROME_CANDIDATES = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -35,7 +38,8 @@ const CHROME_CANDIDATES = [
 const CHROME = process.env.ZEN_CHROME ?? CHROME_CANDIDATES[0]
 const PORT = Number(process.env.ZEN_CDP_PORT ?? 9222)
 const STUB = process.env.ZEN_STUB_URL ?? 'http://127.0.0.1:5299/preview.js'
-const VAULT_SLUG = 'D__Documents_My_Knowledge'
+/** 预置展开态的默认 vault slug：替身那份书库路径推出来的（见 expansionState.mjs）。 */
+const DEFAULT_VAULT_SLUG = 'D_Documents_My_Knowledge'
 
 const args = process.argv.slice(2)
 const out = resolve(args[0] ?? 'tmp/shot.png')
@@ -137,7 +141,7 @@ try {
   })
   if (opt.expanded) {
     await send('Page.addScriptToEvaluateOnNewDocument', {
-      source: `try{localStorage.setItem('zenreader.folder.expanded.${VAULT_SLUG}', ${JSON.stringify(opt.expanded)})}catch(e){}`,
+      source: setExpansionState(opt.expanded, opt.vaultSlug ?? DEFAULT_VAULT_SLUG),
     })
   }
   if (opt.theme) {
@@ -161,6 +165,21 @@ try {
       console.log('script →', JSON.stringify(r.result?.value ?? null))
     }
     await sleep(Number(opt.after ?? 700))
+  }
+
+  if (opt.hover) {
+    // `:hover` 只认真指针（合成 pointerover 触发不了它），故走 CDP 的 Input 域。
+    const r = await send('Runtime.evaluate', {
+      expression: `(() => { const el = document.querySelector(${JSON.stringify(opt.hover)}); if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`,
+      returnByValue: true,
+    })
+    const at = r.result?.value
+    if (!at) {
+      console.log('[hover] 找不到', opt.hover)
+    } else {
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y })
+      await sleep(Number(opt.after ?? 700))
+    }
   }
 
   const shot = { format: 'png' }

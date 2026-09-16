@@ -167,6 +167,20 @@
     return { files: files, dirs: folders.map(function (f) { return f[0] }) }
   }
 
+  /**
+   * 展开态的 localStorage 键，按 useFolderExpansion.storageKey() 的同一条规则从
+   * vaultPath 推出来，并挂到 window 上供探针按名预置（`--expanded=`）。
+   *
+   * 为什么要公开：这条键是**实现细节**（路径 slug 规则 + 前缀），探针里另抄一份就会
+   * 在替身换 vaultPath 时悄悄对不上——`--expanded` 失效时页面照样出图，只是出的是
+   * 默认态，很难发现（第九轮那个 D__ 双下划线的旧常量就是这么来的）。
+   */
+  function expansionKey() {
+    var slug = String(settings.vaultPath || '').replace(/[^\w.-]+/g, '_').slice(-96)
+    return 'zenreader.folder.expanded.' + slug
+  }
+  window.__ZEN_EXPANSION_KEY = expansionKey()
+
   function readSettings() {
     // localStorage 里的键整份覆盖仿真设置——否则新加的设置项（如侧栏宽度）
     // 会被这里的默认值悄悄盖掉，预览里调什么都看不到效果。

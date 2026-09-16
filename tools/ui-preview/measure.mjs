@@ -4,18 +4,23 @@
  *   node tools/ui-preview/measure.mjs [--url=...] [--script=<js>]
  *
  * 判据（本机 w-56 = 224px 侧栏下）：
- *   书库标题 / 区带标题 / 顶层分组名的 x  → 三者相等（44）
- *   任意深度分组的 .folder-tail 右缘     → 全部相等（204）
- *   折页与书架图标的水平中心             → 相等（29）
+ *   书库标题 / 区带标签 / 顶层分组名的**文字左缘**  → 三者相等（44）
+ *   任意深度分组的 .folder-tail 右缘     → 全部相等（204），区带标题的 ＋ 右缘同 204
+ *   折页与书架图标的水平中心             → 相等（29）——仅指树行；区带标题自第十轮起
+ *                                          只是标签 + ＋，没有折页槽
  *
  * 沙箱提示：同 shot.mjs，需要放宽文件权限执行。
  */
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { setExpansionState } from './expansionState.mjs'
+
 const CHROME = process.env.ZEN_CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 const PORT = Number(process.env.ZEN_CDP_PORT ?? 9224)
 const STUB = process.env.ZEN_STUB_URL ?? 'http://127.0.0.1:5299/preview.js'
+/** 预置展开态的默认 vault slug：替身那份书库路径推出来的（见 expansionState.mjs）。 */
+const DEFAULT_VAULT_SLUG = 'D_Documents_My_Knowledge'
 const opt = Object.fromEntries(
   process.argv
     .slice(2)
@@ -87,8 +92,7 @@ const MEASURE = `(() => {
     box('@.side-root-icon', '书库 · 图标'),
     box('@.side-row-root .side-title', '书库 · 名称'),
     box('@.side-row-root .side-count', '书库 · 计数'),
-    box('@.side-head-toggle', '分组 · 折页'),
-    box('@.side-head .side-title', '分组 · 名称'),
+    box('@.side-head .side-title', '分组 · 标签（盒）'),
     box('@.side-head-action', '分组 · ＋'),
   ]
   rows.forEach((r) => {
@@ -98,15 +102,33 @@ const MEASURE = `(() => {
     out.push(rail(p, '.folder-chevron-btn'))
   })
 
-  // 三条判据
-  const x = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().x)
-  const right = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().right)
+  // 三条判据。
+  //
+  // 「名称左基线」量的是**文字的左缘**而不是盒的左缘：区带标签的缩进由它自己的
+  // padding 承担（盒从 x=20 起、文字在 x=44），拿盒的左缘去比会把正确对齐读成
+  // 差了 24px——第九轮就在这上面绕过一圈。故这里用 Range 取文字实际落点。
+  const textLeft = (sel) => {
+    const el = document.querySelector(sel)
+    if (!el) return null
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    return Math.round(range.getBoundingClientRect().x)
+  }
+  const right = (sel) => {
+    const el = document.querySelector(sel)
+    return el ? Math.round(el.getBoundingClientRect().right) : null
+  }
   const tails = rows.map((r) => Math.round(r.querySelector('.folder-tail').getBoundingClientRect().right))
   out.push({
     label: '判据',
-    名称左基线: [x('.side-row-root .side-title'), x('.side-head .side-title'), x('.folder-row .folder-name > span')],
+    名称左基线: [
+      textLeft('.side-row-root .side-title'),
+      textLeft('.side-head .side-title'),
+      textLeft('.folder-row .folder-name > span'),
+    ],
     尾列右缘: Array.from(new Set(tails)),
     计数右缘: right('.side-row-root .side-count'),
+    '＋右缘': right('.side-head-action'),
   })
   return JSON.stringify(out, null, 1)
 })()`
@@ -132,7 +154,7 @@ try {
   })
   if (opt.expanded) {
     await send('Page.addScriptToEvaluateOnNewDocument', {
-      source: `try{localStorage.setItem('zenreader.folder.expanded.D__Documents_My_Knowledge', ${JSON.stringify(opt.expanded)})}catch(e){}`,
+      source: setExpansionState(opt.expanded, opt.vaultSlug ?? DEFAULT_VAULT_SLUG),
     })
   }
   await send('Page.navigate', { url })
