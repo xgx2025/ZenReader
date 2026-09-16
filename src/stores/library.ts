@@ -2,12 +2,14 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { nativeFs, isTauri } from '@/lib/native'
-import { deleteDocumentNotes, moveDocumentNotes } from '@/lib/notesApi'
+import { deleteDocumentNotes, moveDocumentNotes, renameFolderNotes } from '@/lib/notesApi'
 import {
   docFormatOf,
   isHtmlFile,
+  isPathInFolder,
   resolveHtmlTitle,
   resolveTitle,
+  rewritePathPrefix,
   vaultFile,
 } from '@/lib/vault'
 import { renderMarkdown } from '@/lib/markdown/parser'
@@ -24,6 +26,7 @@ import {
   findNode,
   folderScope as scopeOf,
   inFolderScope,
+  mergeFolderOrder,
   type FolderScope,
 } from '@/lib/folderTree'
 import { customRank, mergeVisibleMove, reconcileCustomOrder } from '@/lib/arrange'
@@ -69,6 +72,8 @@ export const useLibraryStore = defineStore('library', () => {
 
   // —— 拖动排序（手动排布）：展示顺序的状态 + 持久化接线 ——
   const customOrder = ref<string[]>([])
+  /** 分组顺序：用户排过的分组路径全序；缺席的按名字序补位。 */
+  const folderOrder = ref<string[]>([])
   const arranged = ref(false)
   const sortPreference = ref<ArrangeSortMode>('auto')
   /** 最近一次 refresh 到达的新卷（拖动排序中供淡「新」标；refresh 即刷新）。 */
@@ -90,6 +95,7 @@ export const useLibraryStore = defineStore('library', () => {
     return {
       vaultPath: vault,
       customOrder: customOrder.value,
+      folderOrder: folderOrder.value,
       arranged: arranged.value,
       sortPreference: sortPreference.value,
     }
@@ -103,6 +109,7 @@ export const useLibraryStore = defineStore('library', () => {
   /** 把拖动排序态重置为干净默认（清库 / 读库失败时）。 */
   function resetArrange(): void {
     customOrder.value = []
+    folderOrder.value = []
     arranged.value = false
     sortPreference.value = 'auto'
     latestArrivals.value = []
@@ -164,8 +171,12 @@ export const useLibraryStore = defineStore('library', () => {
     })
   })
 
+  /**
+   * 侧栏分组树。按**卷式过滤后**的列表建树——侧栏数字必须与右侧所见同源，否则
+   * 「卷式选 html，侧栏却还在数 md」会当场自相矛盾（分组与空目录仍全额保留）。
+   */
   const folderTree = computed<FolderNode[]>(() =>
-    buildFolderTree(files.value, dirs.value),
+    buildFolderTree(formatFiltered.value, dirs.value, folderOrder.value),
   )
 
   /** Every folder path in the vault, flattened (for "move to" picking). */
@@ -211,6 +222,7 @@ export const useLibraryStore = defineStore('library', () => {
         const p = await loadArrange(path)
         if (settings.vaultPath !== path) return // 载序期间换库：等新库自己的 refresh
         customOrder.value = p?.customOrder ?? []
+        folderOrder.value = p?.folderOrder ?? []
         arranged.value = p?.arranged ?? false
         sortPreference.value = p?.sortPreference ?? 'auto'
       }
@@ -288,8 +300,17 @@ export const useLibraryStore = defineStore('library', () => {
     const clean = name.trim()
     if (!clean || clean.includes('/') || clean.includes('\\')) return
     const parent = selectedFolder.value
-    const relDir = parent ? `${parent}/${clean}` : clean
-    await nativeFs.createDir(vaultFile(settings.vaultPath, relDir))
+    return createFolderAt(parent ? `${parent}/${clean}` : clean)
+  }
+
+  /**
+   * 按**相对路径**建目录（取消选中无关的中间层）。新建分组的落点是当前选中分组，
+   * 「撤销释怀」也要把分组放回原位——两处都只认路径，故不必先改选中态。
+   */
+  async function createFolderAt(relativePath: string) {
+    const clean = relativePath.replace(/^\/+|\/+$/g, '')
+    if (!clean) return
+    await nativeFs.createDir(vaultFile(settings.vaultPath, clean))
     await refresh()
   }
 
@@ -307,6 +328,57 @@ export const useLibraryStore = defineStore('library', () => {
       selectedFolder.value = ''
     }
     await refresh()
+  }
+
+  /**
+   * 分组改名 / 搬家：改的是磁盘上的目录，同时把四份**按路径存的东西**一起迁走——
+   * 觉悟笔记（SQLite，按子树批量换前缀）、阅读进度（localStorage）、卡片自定义序、
+   * 分组自身顺序。少迁一份，用户就会看到「改名后笔记没了 / 读到一半的位置丢了」。
+   *
+   * 前后端分工：后端只认路径、只做校验与盘上操作（拒绝非法路径、搬进自身子树、
+   * 目标已存在），本函数负责把数据层的路径一起改写。
+   */
+  async function renameFolder(from: string, to: string) {
+    const cleanFrom = from.replace(/^\/+|\/+$/g, '')
+    const cleanTo = to.replace(/^\/+|\/+$/g, '')
+    if (!cleanFrom || !cleanTo || cleanFrom === cleanTo) return
+
+    await nativeFs.renameDir(settings.vaultPath, cleanFrom, cleanTo)
+    // 笔记批量迁前缀。失败不该让整次改名回滚（目录已经搬了），但要让调用方知道
+    // 数据可能没跟上——故不吞异常，交给上层提示。
+    await renameFolderNotes(settings.vaultPath, cleanFrom, cleanTo)
+    useProgressStore().moveFolder(cleanFrom, cleanTo)
+
+    customOrder.value = customOrder.value.map((p) =>
+      rewritePathPrefix(p, cleanFrom, cleanTo),
+    )
+    folderOrder.value = folderOrder.value.map((p) =>
+      rewritePathPrefix(p, cleanFrom, cleanTo),
+    )
+    // 选中态与展开态都指向旧路径，一并改写；否则主区会瞬间跳回书库。
+    if (isPathInFolder(selectedFolder.value, cleanFrom)) {
+      selectedFolder.value = rewritePathPrefix(selectedFolder.value, cleanFrom, cleanTo)
+    }
+    saveArrangeSoon()
+    await refresh()
+  }
+
+  /**
+   * 提交一次分组排序：`parents` 是「父分组路径 → 该父下子分组的完整显示序」。
+   * 存储里是全局全序，故经 `mergeFolderOrder` 重建一次。
+   */
+  function commitFolderOrder(parents: Map<string, string[]>) {
+    const next = mergeFolderOrder(folderOrder.value, parents)
+    if (!next) return
+    folderOrder.value = next
+    saveArrangeSoon()
+  }
+
+  /** 把分组顺序恢复为名字序（设置面板 / 将来的「恢复默认」用）。 */
+  function resetFolderOrder() {
+    if (!folderOrder.value.length) return
+    folderOrder.value = []
+    saveArrangeSoon()
   }
 
   /** Move a document's file on disk, migrating its notes to the new path. */
@@ -383,17 +455,22 @@ export const useLibraryStore = defineStore('library', () => {
     // 拖动排序（手动排布）
     displayMode,
     customOrder,
+    folderOrder,
     arranged,
     sortPreference,
     latestArrivals,
     setSort,
     seedDefaultOrder,
     commitVisibleMove,
+    commitFolderOrder,
+    resetFolderOrder,
     flushArrange,
     refresh,
     openVault,
     createFolder,
+    createFolderAt,
     removeFolder,
+    renameFolder,
     moveDocument,
     removeDocument,
   }

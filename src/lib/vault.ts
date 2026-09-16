@@ -17,6 +17,29 @@ export function folderPathFromRelative(relativePath: string): string {
   return parts.join('/')
 }
 
+/**
+ * 把一个路径的前缀从 `from` 换到 `to`（`from` 自身与 `from/...` 都算）。
+ *
+ * 「分组改名/搬家」要同时改写四份按路径存的东西：阅读进度（localStorage）、
+ * 卡片自定义序、分组自定义序，以及选中态。它们都是 `/` 分隔的相对路径，故共用
+ * 这一条纯函数——边界靠 `${from}/` 收口：裸 `startsWith(from)` 会把兄弟分组
+ * `JavaScript` 算进 `Java`。
+ *
+ * 不在该前缀下 → 原样返回（调用方据此判断「这条要不要动」）。
+ */
+export function rewritePathPrefix(path: string, from: string, to: string): string {
+  if (!from) return path
+  if (path === from) return to
+  const prefix = `${from}/`
+  return path.startsWith(prefix) ? `${to}/${path.slice(prefix.length)}` : path
+}
+
+/** 路径是否落在某分组作用域内（含自身）。 */
+export function isPathInFolder(path: string, folder: string): boolean {
+  if (!folder) return true
+  return path === folder || path.startsWith(`${folder}/`)
+}
+
 /** Extension regex for every document ZenReader imports & reads. */
 export const DOC_EXT = /\.(md|markdown|html|htm)$/i
 

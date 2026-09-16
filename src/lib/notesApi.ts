@@ -48,3 +48,12 @@ export function deleteDocumentNotes(
 ): Promise<void> {
   return nativeNotes.deleteDocument(vaultPath, relativePath)
 }
+
+/** 分组改名 / 搬家后，把整棵子树内笔记的路径前缀换到新位置。 */
+export function renameFolderNotes(
+  vaultPath: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  return nativeNotes.renameFolder(vaultPath, from, to)
+}

@@ -68,7 +68,13 @@ function parsePayload(raw: string): Omit<ArrangePersisted, 'vaultPath'> | null {
     )
       ? (d.sortPreference as ArrangeSortMode)
       : 'auto'
-    return { customOrder, arranged, sortPreference }
+    // folderOrder 是后加的字段：旧文件里没有 → 空序（全按名字序），不是错误。
+    const folderOrder = dedupeKeepLast(
+      Array.isArray(d.folderOrder)
+        ? d.folderOrder.filter((p): p is string => typeof p === 'string')
+        : [],
+    )
+    return { customOrder, folderOrder, arranged, sortPreference }
   } catch {
     return null
   }

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { rewritePathPrefix } from '@/lib/vault'
 import type { ProgressEntry, ProgressIndex } from '@/types/progress'
 
 const STORAGE_KEY = 'zenreader:progress'
@@ -87,5 +88,23 @@ export const useProgressStore = defineStore('progress', () => {
     schedulePersist()
   }
 
-  return { entries, get, record, drop, move, flush }
+  /**
+   * 分组改名 / 搬家：整棵子树内所有条目的路径前缀一起换。
+   * 用整表替换触发响应式（`entries` 是 ref，原地改键不会通知）。
+   */
+  function moveFolder(from: string, to: string) {
+    if (!from) return
+    const next: ProgressIndex = {}
+    let touched = false
+    for (const [path, entry] of Object.entries(entries.value)) {
+      const moved = rewritePathPrefix(path, from, to)
+      if (moved !== path) touched = true
+      next[moved] = entry
+    }
+    if (!touched) return
+    entries.value = next
+    schedulePersist()
+  }
+
+  return { entries, get, record, drop, move, moveFolder, flush }
 })

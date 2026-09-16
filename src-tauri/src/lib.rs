@@ -266,22 +266,73 @@ fn move_file(from: String, to: String) -> Result<(), String> {
     std::fs::rename(&from, &to).map_err(|e| e.to_string())
 }
 
+/// 分组路径的防御校验：必须落在书库内——拒绝空路径、绝对路径、根相对路径
+/// （Windows 下 `/` 开头的路径不算 is_absolute，但 join 会逃出书库）与 `..`。
+fn check_relative(label: &str, relative_path: &str) -> Result<(), String> {
+    if relative_path.is_empty()
+        || Path::new(relative_path).is_absolute()
+        || relative_path.starts_with('/')
+        || relative_path.starts_with('\\')
+        || relative_path.split(['/', '\\']).any(|seg| seg == "..")
+    {
+        return Err(format!("非法分组路径：{label}"));
+    }
+    Ok(())
+}
+
+/// 重命名 / 移动一个分组：整棵子树一起搬。`from`/`to` 都是相对书库根的
+/// `/` 分隔路径，新名字取自 `to` 的最后一段。
+///
+/// 三级拒绝，都在动盘之前：
+/// 1. 路径非法或源目录不存在；
+/// 2. 把自己搬进自己的子树（`a` → `a/b/c`）——那会让子树凭空消失；
+/// 3. 目标已存在——`std::fs::rename` 在 Windows 上会静默失败、在 Unix 上会
+///    覆盖空目录，语义不一致，不如一律拒绝，让用户显式处理。
+///
+/// 大小写只在「改个头的大小写」时不算冲突（`Java` → `java`）：这种改名的目标
+/// 目录在 Windows/macOS 上判定为同一个，必须放行。
+#[tauri::command]
+fn rename_dir(dir: String, from: String, to: String) -> Result<(), String> {
+    check_relative("源", &from)?;
+    check_relative("目标", &to)?;
+
+    let src = Path::new(&dir).join(&from);
+    if !src.is_dir() {
+        return Err(format!("分组不存在：{from}"));
+    }
+
+    let to_norm = to.replace('\\', "/");
+    let from_norm = from.replace('\\', "/");
+    // 把分组搬进它自己的子树（`a` → `a/b/c`）会让整棵子树凭空消失，先拦下。
+    if to_norm.starts_with(&format!("{from_norm}/")) {
+        return Err("不能把分组搬到它自己里面".into());
+    }
+
+    let dest = Path::new(&dir).join(&to_norm);
+    if dest.exists() {
+        // 仅大小写不同视为自身改名，放行。
+        let same_case_insensitive = dest
+            .to_string_lossy()
+            .to_lowercase()
+            .eq(&src.to_string_lossy().to_lowercase());
+        if !same_case_insensitive {
+            return Err(format!("已有同名分组：{to_norm}"));
+        }
+    }
+
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&src, &dest).map_err(|e| e.to_string())
+}
+
 /// Delete an empty 分组 inside the vault. The directory tree (including
 /// sub-directories) must contain no files at all, or the command refuses —
 /// 分组 must be emptied before it can be 释怀, so real `.md` files are never
 /// touched. `relative_path` is a `/`-separated path relative to the vault root.
 #[tauri::command]
 fn remove_folder(dir: String, relative_path: String) -> Result<(), String> {
-    // 防御：分组路径应始终落在书库内——拒绝空路径、绝对路径、根相对路径
-    // （Windows 下 `/` 开头的路径不算 is_absolute，但 join 会逃出书库）与 `..`。
-    if relative_path.is_empty()
-        || Path::new(&relative_path).is_absolute()
-        || relative_path.starts_with('/')
-        || relative_path.starts_with('\\')
-        || relative_path.split(['/', '\\']).any(|seg| seg == "..")
-    {
-        return Err("非法分组路径".into());
-    }
+    check_relative("分组", &relative_path)?;
     let target = Path::new(&dir).join(&relative_path);
     if !target.is_dir() {
         return Err(format!("分组不存在：{relative_path}"));
@@ -359,10 +410,46 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    /// rename_dir：整棵子树随目录一起搬；三级拒绝都在动盘之前。
+    #[test]
+    fn rename_dir_moves_subtree_and_refuses_bad_moves() {
+        let base = std::env::temp_dir().join(format!(
+            "zenreader-rename-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("vault");
+        std::fs::create_dir_all(root.join("Java/深水区")).unwrap();
+        std::fs::create_dir_all(root.join("JVM")).unwrap();
+        std::fs::write(root.join("Java/深水区/锁.md"), "x").unwrap();
+        let dir = root.to_string_lossy().into_owned();
+
+        // 纯改名：子树跟着走
+        rename_dir(dir.clone(), "Java".into(), "JVM2".into()).unwrap();
+        assert!(!root.join("Java").exists());
+        assert!(root.join("JVM2/深水区/锁.md").is_file());
+
+        // 搬到别的分组下（移动 + 改名）
+        std::fs::create_dir_all(root.join("归档")).unwrap();
+        rename_dir(dir.clone(), "JVM2".into(), "归档/JVM2".into()).unwrap();
+        assert!(root.join("归档/JVM2/深水区/锁.md").is_file());
+
+        // 拒绝：搬进自己的子树
+        assert!(rename_dir(dir.clone(), "归档".into(), "归档/JVM2/里面".into()).is_err());
+        // 拒绝：目标已有同名分组
+        assert!(rename_dir(dir.clone(), "JVM".into(), "归档".into()).is_err());
+        // 拒绝：源不存在 / 路径逃出书库
+        assert!(rename_dir(dir.clone(), "不存在".into(), "x".into()).is_err());
+        assert!(rename_dir(dir.clone(), "Java".into(), "../外".into()).is_err());
+        assert!(rename_dir(dir.clone(), "..".into(), "x".into()).is_err());
+        assert!(rename_dir(dir.clone(), "".into(), "x".into()).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     /// read_vault 列出 .md/.html/.htm，跳过其它扩展与点目录。
     #[test]
-    fn read_vault_lists_html_and_md() {
-        let base = std::env::temp_dir().join(format!(
+    fn read_vault_lists_html_and_md() {        let base = std::env::temp_dir().join(format!(
             "zenreader-vault-test-{}",
             std::process::id()
         ));
@@ -458,6 +545,7 @@ pub fn run() {
             delete_file,
             create_dir,
             move_file,
+            rename_dir,
             remove_folder,
             read_settings,
             write_settings,
@@ -466,7 +554,8 @@ pub fn run() {
             notes::notes_update,
             notes::notes_delete,
             notes::notes_move_document,
-            notes::notes_delete_document
+            notes::notes_delete_document,
+            notes::notes_rename_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZenReader");

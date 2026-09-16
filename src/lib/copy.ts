@@ -149,6 +149,47 @@ export const COPY = {
   removeDocHint: '将释去此卷：本地文件、觉悟笔记与阅读进度一并放下，不可复回。',
   newFolder: '新建分组',
   folderName: '分组名',
+  /** 改名：菜单项、行内输入框的可访问名、以及各类失败的缘由。 */
+  renameFolder: '重命名',
+  renameFolderHint: '原地改名',
+  renameConflict: '同级已有同名分组',
+  renameFailed: '改名未成，分组名与结构保持不变',
+  folderRenamed: '分组已改名',
+  /** 拖拽移动分组：菜单/提示语，落点三态共用。 */
+  moveFolder: '移到别的分组下',
+  moveFolderInto: '放入',
+  moveFolderBefore: '移到',
+  moveFolderAfter: '移到',
+  folderMoved: '分组已移入',
+  moveFolderFailed: '未能移动，分组留在原处',
+  /** 分组排序：拖动排序提示。 */
+  folderDragHint: '拖动分组可改先后，拖到别的分组上即移入',
+  /** 侧栏宽度：手柄的可访问名与悬停提示。 */
+  sidebarWidth: '侧栏宽度',
+  sidebarWidthHint: '拖动调整侧栏宽度，双击复位',
+  /** 新建分组的落点说明：父级由当前选中分组暗定，必须写出来。 */
+  newFolderUnder: '将在',
+  newFolderUnderRoot: '书库根下',
+  /** 非法分组名的缘由。按钮不禁用——禁用不解释「为什么点不动」。 */
+  folderNameInvalid: '分组名不能包含 / 或 \\',
+  folderNameEmpty: '请先写下分组名',
+  folderExpand: '展开分组',
+  folderCollapse: '收起分组',
+  folderMenu: '分组操作',
+  /** 分组行的完整提示：拼「共 2 篇 · 本层 1 篇」。 */
+  folderCountAll: '共',
+  folderCountHere: '本层',
+  /** 侧栏「分组」区带的小标题：分组是书库下的第二区，先有区带再谈条目。 */
+  groupSection: '分组',
+  /** 折页全开 / 全收（区带头部那两枚）。 */
+  folderExpandAll: '展开全部分组',
+  folderCollapseAll: '收起全部分组',
+  /** 下钻后回书库根：侧栏「书库」行与主区面包屑共用同一句话。 */
+  scopeBack: '回到书库',
+  folderRemovedUndo: '撤销',
+  folderRestored: '分组已复原',
+  /** 导入落点提示条：拼「3 篇已入 · Java」。 */
+  arrivalIn: '已入 ·',
   moveTo: '移到分组',
   moveToRoot: '根目录',
   moreActions: '更多操作',
@@ -246,6 +287,8 @@ export const COPY = {
 
   // 拖拽引卷
   dropToImport: '松手引卷入藏',
+  /** 指针悬停在某分组上时，遮罩改成「松手入『Java』」。 */
+  dropToNamed: '松手入',
 
   // 键径（快捷键速查）
   shortcutSheet: '键径',

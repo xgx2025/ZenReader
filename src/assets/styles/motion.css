@@ -694,8 +694,494 @@
   animation: zen-arrive 0.9s var(--ease-zen) 0.55s both;
 }
 
-/* ── 拖动排序（手动排布）────────────────────────────────────────────── */
+/* ── 书库侧栏 · 分组树 ──────────────────────────────────────────────── */
 
+/* 侧栏的语汇比主区更慢：悬停确认走 --motion-fast(200ms)，展卷/折页走 --motion-base(240ms)。
+   行只让 background-color / color / transform 参与过渡（Tailwind 的 `transition-colors`
+   已按属性收口）——写 `transition-all` 会连带 margin-left（缩进逐行内联重设）而抖。 */
+.folder-chevron {
+  transition: transform var(--motion-base) var(--ease-zen);
+}
+
+/* 子层展卷：高度 0fr → 1fr，行本身不动（逐行算高度会抖）。折叠时子层整体
+   不可点，否则收起后仍能从缝隙里点到。 */
+.folder-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--motion-base) var(--ease-zen);
+}
+.folder-fold-closed {
+  grid-template-rows: 0fr;
+  pointer-events: none;
+}
+.folder-fold > .folder-rows {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 行入场：淡入 + 只回落 3px，按 --row-d 错峰一息而上（超过 12 行不再加长）。 */
+.folder-row-enter-active {
+  transition:
+    opacity var(--motion-base) var(--ease-zen) var(--row-d, 0ms),
+    transform var(--motion-base) var(--ease-zen) var(--row-d, 0ms);
+}
+.folder-row-enter-from {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+/* 离场不排队：先散后合才不拖沓。 */
+.folder-row-leave-active {
+  transition:
+    opacity var(--motion-fast) var(--ease-zen),
+    transform var(--motion-fast) var(--ease-zen);
+}
+.folder-row-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
+}
+/* 释怀后兄弟行平滑补位（与拖动排序同一族缓动）。 */
+.folder-row-move {
+  transition: transform var(--motion-base) var(--ease-zen);
+}
+
+/* 树行容器：行本身（.side-row）已给足内边距与圆角，这里只管落点高亮与间距。 */
+.folder-line {
+  position: relative;
+  /* 树行的折页格窄一档（1.125rem）：树的折页本身就是缩进符号，不必再宽。
+     书库行与区带标题用与图标同位宽的 1.5rem（见 .side-cv），故三者的
+     名字列都落在同一条竖线上。 */
+  --side-cv: 1.125rem;
+}
+.folder-line + .folder-line {
+  margin-top: 1px;
+}
+
+/* 计数与行操作共占的一格：定宽，故任意行的数字都落在同一列上；
+   悬停时数字淡去、动作浮出，列宽不变、行不跳。 */
+.folder-tail {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  width: 1.875rem;
+  height: 1.25rem;
+}
+.folder-count {
+  transition: opacity var(--motion-fast) var(--ease-zen);
+}
+.group:hover .folder-count {
+  opacity: 0;
+}
+
+/* 引卷落点：悬停到哪个分组，哪个分组亮起——全屏遮罩之外再给一层「落在哪」。
+   沿用 arrange-slot 同族的竹色虚线语汇，进出 200ms，指针扫过时不闪。 */
+.folder-row .drop-target {
+  background: color-mix(in srgb, var(--bamboo) 20%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--bamboo) 55%, transparent);
+  outline-offset: -2px;
+  transition:
+    background var(--motion-fast) var(--ease-zen),
+    outline-color var(--motion-fast) var(--ease-zen);
+}
+
+/* ── 分组改名 · 行内输入 ─────────────────────────────────────────────
+   改名在**原地**发生：名称那一格换成输入框，行高、折页、计数列都不动，所以
+   改名前后的位置感不丢。校验没过时行下缘浮一句小字（不占布局，行高恒 32px），
+   且**留在编辑态**——否则用户刚打的字会被吞掉，想改就得从菜单重来。 */
+.folder-rename-input {
+  /* 铺满「名称 + 尾列」的整格：原位改名时输入框要看起来就是那一行本身，
+     只占名称列会在中间断出一截空白，像另插了一个控件。 */
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 1.5rem;
+  padding-inline: 0.375rem;
+  border-radius: 0.375rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  outline: 1px solid color-mix(in srgb, var(--bamboo) 45%, transparent);
+  outline-offset: -1px;
+}
+.folder-rename-input:focus {
+  outline-color: var(--bamboo);
+}
+.folder-rename-bad {
+  outline-color: color-mix(in srgb, var(--sandal) 72%, transparent);
+}
+/* 缘由浮在行的**下一个**行位（行高 33px = 32 + 1px 行距），故不会压住下一行的文字。 */
+.folder-rename-hint {
+  position: absolute;
+  left: 2.75rem;
+  top: calc(100% + 0.125rem);
+  z-index: 2;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--sandal) 30%, transparent);
+  background: var(--paper);
+  color: var(--sandal);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.folder-row-renaming {
+  /* 编辑中的行不许被拖走（拖拽会夺走输入框的指针） */
+  cursor: text;
+}
+/* 编辑中的行要压在兄弟行之上，否则它下面那条提示会被后画的行盖住。 */
+.folder-row-renaming {
+  z-index: 2;
+}
+
+/* ── 分组拖拽：排序与移动 ────────────────────────────────────────────
+   一条手势表达两件事，靠落点区分：行的上/下 1/4 画一根插入线（排序），中间
+   整行亮起（放进它里面＝移动）。被拖起的行淡下去，留下「它从这里被拿走了」。
+
+   **整行都能拖**：行里的折页、名称、⋯ 都照常收指针——按下它们同样能把这行拿起来
+   （走的是 `useFolderDrag` 的 5px 阈值，所以"按着不动"仍是点击原控件的语义）。
+   曾经这里有一组 `pointer-events: none` 把叶子全部对命中测试隐形，那是 HTML5 拖放
+   时代的产物（为了让 drop 派发得出来，见第七轮记录）；换成指针事件后它不但没用，
+   还会把可拖区域缩成"折页与名称之间那几条缝"——用户看到的正是「只有长条前面一小段
+   能拖，又没有任何提示」。
+
+   **静止时不改光标**：行身保持系统默认箭头。曾给行身配过 `grab`「可以拿起来」的提示，
+   但侧栏是一列常驻的条目，整列一直握着小手反而吵；可拖的提示交给拖动中的反馈
+   （行淡下去 + 插入线）与光标在拖动中的 `grabbing`。 */
+.folder-row-lifted .folder-line {
+  opacity: 0.4;
+}
+/* 拖动中整页 `grabbing`：与卡片拖动排序（.arrange-drag-active）同源。 */
+body.folder-drag-active {
+  cursor: grabbing;
+  user-select: none;
+}
+body.folder-drag-active .folder-line,
+body.folder-drag-active .folder-line * {
+  cursor: grabbing;
+}
+/* 插入线：2px 竹色横线贴行的上缘或下缘，不改变行高。 */
+.folder-drop-before::after,
+.folder-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--bamboo);
+}
+.folder-drop-before::after {
+  top: -1px;
+}
+.folder-drop-after::after {
+  bottom: -1px;
+}
+.folder-drop-inside {
+  background: color-mix(in srgb, var(--bamboo) 16%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--bamboo) 45%, transparent);
+  outline-offset: -2px;
+}
+/* 按住时给一点"抓住了"的反馈（系统默认的 :active 光标），越过阈值后由
+   body.folder-drag-active 接手成全局 grabbing。 */
+.folder-row:not(.folder-row-renaming) .folder-line:active {
+  cursor: grabbing;
+}
+
+/* ── 侧栏宽度手柄 ────────────────────────────────────────────────────
+   平时完全隐形（否则侧栏右缘常驻一条竖线，像多了一道边框）；悬停或键盘聚焦时
+   浮出一根竹色细线。命中区宽 6px，但视觉只有 2px——好抓，又不喧哗。 */
+.sidebar-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  z-index: 3;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+}
+.sidebar-resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 2px;
+  height: 100%;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--bamboo) 45%, transparent);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-zen);
+}
+.sidebar-resize:hover::after,
+.sidebar-resize:focus-visible::after {
+  opacity: 1;
+}
+.sidebar-resize:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 全局规则会把时长压到 0.001ms，但压不掉 delay——留着就变成
+     「什么都不动、却晚一拍才出现」。这里把错峰本身也去掉。 */
+  .folder-row-enter-active,
+  .folder-row-leave-active,
+  .folder-fold,
+  .folder-chevron {
+    transition-delay: 0ms !important;
+  }
+}
+
+/* 区带分隔：一根发丝线加一点留白，比多一层底色更轻。 */
+.side-section {
+  margin-top: 0.625rem;
+  padding-top: 0.375rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+/* ── 侧栏的行与区带 ──────────────────────────────────────────────────
+   侧栏里只有三样东西：**一块可点中的地面**（书库行）、**一小行标题**
+   （分组）、以及**树的条目**。三者若各自排版，左右基线必然互相漂移——
+   所以它们共用一条「隐形栏位」流水线，按固定顺序排：
+
+     缩进槽(树行专属) · 折页/图标槽 · 名称 ····· 尾列(计数 / 行内动作)
+
+   两条对齐由此成立，且都靠栏位、不靠逐个调间距：
+
+   1. **名称起于同一条竖线**（x=44）：书库行与区带标题的图标槽宽 1.5rem 且
+      补 3px 内边距，与树行「1.125rem 折页槽 + 0.375rem 间距」在视觉重心上
+      等价——图标中心与折页中心都落在 x=25。
+   2. **数字终在同一条竖线**（尾列定宽 1.875rem、贴行尾）：缩进槽只推折页与
+      名称，不推尾列。故无论展开哪一支、层数多深，所有计数都在同一列上——
+      这一列是侧栏里唯一一条贯穿全栏的竖线，漂一次就看得见。
+
+   行高 32px、行距 1px：条目多为 2–4 个中文字的短标签，32px 才与主区的
+   呼吸同调。整栏统一 --ease-zen，且只过渡 background-color / color /
+   transform——`transition-all` 会连带内边距而让缩进抖动。 */
+
+.side-row {
+  position: relative; /* 竖条与行内动作钮都以行盒为定位基线 */
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+  height: 2rem;
+  padding-inline: 0.5rem;
+  border-radius: 0.5rem;
+  text-align: left;
+  color: var(--ink-soft);
+  transition:
+    background-color var(--motion-fast) var(--ease-zen),
+    color var(--motion-fast) var(--ease-zen);
+}
+.side-row:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--bamboo) 9%, transparent);
+}
+
+/* 缩进槽：只占位，不画东西。它是「名称右移、尾列不动」的全部实现。 */
+.folder-indent {
+  flex: none;
+  height: 1px;
+}
+
+/* 名称格：占满中间的全部余量（尾列因此被推到行尾）。0 基准而非 auto——
+   auto 会让长名字把尾列往外顶，同一个分组在展开/收起前后数字就换了位置。
+   min-width: 0 是 truncate 的前提。 */
+.side-name {
+  min-width: 0;
+  flex: 1 1 0;
+}
+/* 余量填充：书库行的名字只占自己该占的宽（不像分组行那样可以独占整列），
+   余下的空间由它吃掉，好把计数推回与树行同一条竖线。 */
+.side-fill {
+  flex: 1 1 0;
+}
+/* 尾列：计数与行内动作共占的一格。定宽，故任意行的数字都落在同一竖线上。 */
+.side-tail {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  width: 1.875rem;
+  height: 1.25rem;
+}
+
+/* 折页槽：树行放折页按钮（或等宽占位），书库行放书架图标，区带标题放全收
+   折页——同一个槽、同一个宽（1.125rem）、同一个中心 x=29：
+
+     0.75rem(侧栏留白) + 0.5rem(行内边距) + 1.125rem÷2 = 29
+
+   于是「书库」「分组」与顶层分组名都从同一条竖线（x=44）起笔：名称 =
+   0.75 + 0.5 + 1.125 + 0.375 = 2.75rem。 */
+.side-cv {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--side-cv, 1.125rem);
+  height: 1.5rem;
+  border-radius: 0.375rem;
+}
+
+/* 书库行：与分组行同高同内边距（对齐靠栏位，不靠「重半档」的尺寸差），
+   但给出身份标记——书架图标与 14px 字——它是一块地面，不是树里的条目。
+   收起整棵树由区带标题的折页管，故这行不必再挂折页。 */
+/* 书架图标定宽 1rem：它同时是「书库」的身份标识与整栏左侧的标尺。 */
+.side-root-icon {
+  flex: none;
+  width: 1rem;
+  color: color-mix(in srgb, var(--bamboo) 70%, transparent);
+}
+.side-row-root:hover .side-root-icon,
+.side-row-on .side-root-icon {
+  color: var(--bamboo);
+}
+
+/* 选中行：底色之外再补一根竖条。竖条画在行的内边距里（left: 0），
+   与展开的折页、层级缩进都不打架。 */
+.side-row-on {
+  background: color-mix(in srgb, var(--bamboo) 15%, transparent);
+  color: var(--ink);
+  font-weight: 500;
+}
+.side-row-on::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--bamboo) 72%, transparent);
+}
+
+/* 条目文字。三种身份共用一个字号（13px）：区带标题靠**小一号的 11.5px +
+   字距**退成标题，书库行靠 14px 站成地面，树行居中。 */
+.side-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  letter-spacing: 0;
+}
+/* 书库行是地面：比条目重半档，压在 14px 上。名字按内容宽，余量交给 .side-fill。 */
+.side-row-root .side-title {
+  flex: 0 1 auto;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+/* 区带标题：小一号、加字距、压暗——它是**标签**，不是条目，故不与条目争
+   视觉重心。颜色取 ink-soft 的 90%（亮主题 5.1:1），而不是旧版那块
+   2.0–2.4:1 的灰——标题可以轻，但不能看不清。 */
+.side-head .side-title {
+  font-size: 0.71875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--ink-soft) 90%, transparent);
+}
+.side-row:hover .side-title,
+.side-row-on .side-title {
+  color: var(--ink);
+}
+
+/* 右侧计数：本层数（与点进去所见一致）+ 子树总数（不同时才显）。
+   两数之间只靠字色分主次：本层用 ink-soft 满档（亮主题 6.5:1），总数降到 90%
+   （5.1:1）——同字号、同灰阶，读起来是一件事的两个刻度，而不是「一个数字一个
+   警告色」。旧版把总数涂成沙色，语义撞上了「错误」，也把一列数字变成了花斑。 */
+.side-count {
+  flex: none;
+  text-align: right;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  transition: color var(--motion-fast) var(--ease-zen);
+}
+/* 0 卷分组：唯一的动作是释怀，数字本身没什么可读的，淡到 3.2:1 左右——
+   低于正文但仍可辨识，比旧版 1.9–2.4:1 的「看不见」清楚。 */
+.side-count-zero {
+  color: color-mix(in srgb, var(--ink-soft) 75%, transparent);
+}
+/* 子树总数：本层数之后的第二个刻度。 */
+.side-count-alt {
+  color: color-mix(in srgb, var(--ink-soft) 90%, transparent);
+}
+.side-row:hover .side-count {
+  color: color-mix(in srgb, var(--ink) 80%, transparent);
+}
+
+/* 区带标题行：仍走同一条栏位流水线（故「分组」与下面的分组名同一起笔线），
+   只是矮一档、不参与悬停。 */
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding-inline: 0.5rem;
+  color: var(--ink-soft);
+}
+/* 左侧折页槽里的小动作钮（全开 / 全收）：宽高完全交给 .side-cv，
+   故它与树里的折页同宽同心，不会把「分组」二字挤出半格。 */
+.side-head-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  color: color-mix(in srgb, var(--ink-soft) 80%, transparent);
+  transition:
+    background-color var(--motion-fast) var(--ease-zen),
+    color var(--motion-fast) var(--ease-zen);
+}
+/* 尾部动作钮：新建分组的 ＋。宽度与树行的尾列一致，故「＋」正落在数字那一列
+   的头上，而不是悬在半空；它同时也是这一行的右缘。 */
+.side-head-action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.5rem;
+  border-radius: 0.375rem;
+  color: color-mix(in srgb, var(--ink-soft) 88%, transparent);
+  transition:
+    background-color var(--motion-fast) var(--ease-zen),
+    color var(--motion-fast) var(--ease-zen);
+}
+.side-head-toggle:hover,
+.side-head-action:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--bamboo) 12%, transparent);
+}
+/* 全收时折页横过来——与分组行的折页同一套语义。 */
+.side-head-toggle[aria-expanded='false'] .folder-chevron {
+  transform: rotate(-90deg);
+}
+
+/* 新建分组表单：它是「即将出现在这一区里的一条」，故整块缩进到名称列起笔线
+   （2.75rem = 侧栏留白 + 行内边距 + 折页槽 + 间距），左边一根竹色发丝线
+   说明它挂在树里，而不是浮在侧栏上的第三个东西。 */
+.side-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.375rem 0 0.5rem 2.75rem;
+  padding-left: 0.625rem;
+  border-left: 1px solid color-mix(in srgb, var(--bamboo) 32%, transparent);
+}
+/* 保存 / 取消：等宽两枚，高度与行同档（2rem），避免一行里塞两个 12px 小胶囊。 */
+.side-form-btn {
+  flex: 1 1 0;
+  height: 2rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  transition:
+    background-color var(--motion-fast) var(--ease-zen),
+    color var(--motion-fast) var(--ease-zen),
+    opacity var(--motion-fast) var(--ease-zen);
+}
+
+/* ── 拖动排序（手动排布）────────────────────────────────────────────── */
 /* 让位：TransitionGroup 给被重排的卡内联 transform，由这里接管缓移。 */
 .arrange-move {
   transition: transform 420ms var(--ease-zen);
