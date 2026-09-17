@@ -55,10 +55,25 @@ export interface ReaderSettings {
   immersiveFullscreen: boolean
   /** 宣纸颗粒纹理（WebGL 静态叠层，不可用时静默退回纯色纸底）。 */
   paperTexture: PaperTextureLevel
+  /**
+   * 书库侧栏宽度（px）。侧栏要装「Java 核心技术 卷I」这类长分组名，固定宽度
+   * 必然截断，故给一条可拖的手柄 + 一个设置项；两处共用这个值。
+   */
+  sidebarWidth: number
   /** 禅钟歇息提醒。 */
   reminder: ReminderSettings
   /** The vault folder (书库目录) on disk; empty string = no vault open. */
   vaultPath: string
+}
+
+/** 侧栏宽度的可拖范围（px）：窄到还能放下「分组」二字与计数，宽到不挤占主区。 */
+export const SIDEBAR_MIN = 200
+export const SIDEBAR_MAX = 420
+
+/** 夹到合法范围并取整——拖拽与设置项都经这里，落盘的值永远是合法的。 */
+export function clampSidebarWidth(px: number): number {
+  if (!Number.isFinite(px)) return DEFAULT_SETTINGS.sidebarWidth
+  return Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, px)))
 }
 
 export const DEFAULT_REMINDER: ReminderSettings = {
@@ -81,6 +96,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   zenEntry: 'ink',
   immersiveFullscreen: true,
   paperTexture: 'subtle',
+  sidebarWidth: 224,
   reminder: DEFAULT_REMINDER,
   vaultPath: '',
 }

@@ -15,11 +15,23 @@ import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useVaultDrop, type DropImportResult } from '@/composables/useVaultDrop'
 import { useToast } from '@/composables/useToast'
 import { useCardArrange } from '@/composables/useCardArrange'
+import { useFolderDrag } from '@/composables/useFolderDrag'
+import { useFolderExpansion } from '@/composables/useFolderExpansion'
 import { customRank } from '@/lib/arrange'
+import { planFolderDrop, type FolderDropSpot } from '@/lib/folderDrag'
 import { COPY } from '@/lib/copy'
-import { folderCrumbs } from '@/lib/folderTree'
-import { folderPathFromRelative } from '@/lib/vault'
+import {
+  checkFolderName,
+  collectFolderPaths,
+  findNode,
+  flattenVisibleRows,
+  folderCrumbs,
+  folderNameTaken,
+  folderParentOf,
+} from '@/lib/folderTree'
+import { folderPathFromRelative, isPathInFolder, rewritePathPrefix } from '@/lib/vault'
 import type { ThemeName } from '@/types/settings'
+import { DEFAULT_SETTINGS, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '@/types/settings'
 import type { FormatFilter, VaultFile } from '@/types/document'
 
 const library = useLibraryStore()
@@ -58,8 +70,152 @@ function onSortClick(key: SortKey) {
   library.setSort(key)
 }
 
-function toggleFolder(path: string) {
-  library.selectedFolder = library.selectedFolder === path ? '' : path
+// —— 侧栏分组树：选中、开合、行操作、键盘 ——
+//
+// 「选中」与「展开」刻意分开：点行名只选中（不再「点自己回书库」——那会静默丢掉
+// 位置），点折页只开合（收起内含当前选中的分组时，主区内容也不跟着变）。取消选中
+// 「取消选中」只有两个出口：「书库」行与面包屑。区带标题那一行**不再是开关**
+// （第十轮）：全收 / 全开是两条动作，落在它的右键菜单里。
+const { expanded, rootExpanded, isExpanded, toggle: toggleExpand, reveal, setRoot, rekey: rekeyExpanded } =
+  useFolderExpansion()
+
+/** 展平后的可见行：键盘上下移动、role="tree" 的层级都只需在这一条序列上做。 */
+const folderRows = computed(() =>
+  flattenVisibleRows(library.folderTree, expanded.value),
+)
+
+// 键盘导航（WAI-ARIA tree 惯例）：↑↓ 同可视序移动，→ 展开/进子层，← 收起/回父层，
+// Enter/Space 选中，Home/End 首尾，Menu/Shift+F10 唤菜单。焦点用 roving tabindex。
+const focusedFolder = ref('')
+const sidebarRef = ref<HTMLElement | null>(null)
+/** 屏幕阅读器的活口提示：禁用态收不到 tooltip，缘由得念叨出来。 */
+const ariaMessage = ref('')
+
+const activeRowPath = computed(() => {
+  const rows = folderRows.value
+  if (!rows.length) return ''
+  if (focusedFolder.value && rows.some((r) => r.node.path === focusedFolder.value)) {
+    return focusedFolder.value
+  }
+  return library.selectedFolder
+})
+
+function rowEl(path: string): HTMLElement | null {
+  if (!path) return null
+  return sidebarRef.value?.querySelector<HTMLElement>(
+    `[data-folder-row="${CSS.escape(path)}"]`,
+  ) ?? null
+}
+
+function focusRow(path: string) {
+  const el = rowEl(path)
+  if (!el) return
+  focusedFolder.value = path
+  el.focus()
+  el.scrollIntoView({ block: 'nearest' })
+}
+
+/** 方向键的落点：前/后邻居、父行、首尾。 */
+function navTarget(path: string, dir: 'prev' | 'next' | 'parent' | 'first' | 'last'): string {
+  const rows = folderRows.value
+  if (!rows.length) return ''
+  const i = rows.findIndex((r) => r.node.path === path)
+  if (i < 0) return rows[dir === 'last' ? rows.length - 1 : 0].node.path
+  switch (dir) {
+    case 'prev':
+      return rows[Math.max(0, i - 1)].node.path
+    case 'next':
+      return rows[Math.min(rows.length - 1, i + 1)].node.path
+    case 'parent': {
+      const depth = rows[i].depth
+      for (let j = i - 1; j >= 0; j -= 1) {
+        if (rows[j].depth < depth) return rows[j].node.path
+      }
+      return '' // 已在顶层：键盘上的「父层」是书库行（不在本行序列里）
+    }
+    case 'first':
+      return rows[0].node.path
+    default:
+      return rows[rows.length - 1].node.path
+  }
+}
+
+function selectFolder(path: string) {
+  library.selectedFolder = path
+}
+
+function onFolderSelect(path: string) {
+  selectFolder(path)
+  // 焦点跟着意图走：再按方向键时从刚点过的那一行继续，而非从旧位置。
+  focusedFolder.value = path
+  nextTick(() => focusRow(path))
+}
+
+/** 折页只开合，不动选中——主区内容不该因为「把树收起来」而变。 */
+function onFolderToggle(path: string) {
+  toggleExpand(path)
+}
+
+function onRowKeydown(e: KeyboardEvent, path: string) {
+  const row = folderRows.value.find((r) => r.node.path === path)
+  const dir = e.key === 'ArrowDown' ? 'next' : e.key === 'ArrowUp' ? 'prev' : null
+  if (dir) {
+    e.preventDefault()
+    focusRow(navTarget(path, dir))
+    return
+  }
+  if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    if (row?.expandable && !isExpanded(path)) toggleExpand(path)
+    else focusRow(navTarget(path, 'next'))
+    return
+  }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    if (row?.expandable && isExpanded(path)) {
+      toggleExpand(path)
+      return
+    }
+    const parent = navTarget(path, 'parent')
+    // 顶层分组的「父层」就是书库（不在这份行序列里）：留在原处，不去抢主区焦点。
+    if (parent) focusRow(parent)
+    return
+  }
+  if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault()
+    focusRow(navTarget(path, e.key === 'Home' ? 'first' : 'last'))
+    return
+  }
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    onFolderSelect(path)
+    return
+  }
+  if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+    e.preventDefault()
+    openMenuForRow(path)
+    return
+  }
+  focusedFolder.value = path
+}
+
+/** 键盘唤菜单：没有指针坐标，锚在该行的左下角（ContextMenu 自会夹取视口）。 */
+function openMenuForRow(path: string) {
+  const node = folderRows.value.find((r) => r.node.path === path)?.node
+  if (!node) return
+  const r = rowEl(path)?.getBoundingClientRect()
+  openFolderMenu({
+    path,
+    count: node.count,
+    x: r?.left ?? 0,
+    y: (r?.bottom ?? 0) + 4,
+  })
+}
+
+/** 「回到书库」：同一件事有两个入口（书库行、面包屑），故抽成一处。 */
+function backToLibrary() {
+  focusedFolder.value = ''
+  selectFolder('')
 }
 
 // —— 卷式筛选：折叠成一枚小签，点击展开三档 ——
@@ -144,18 +300,275 @@ function closeFolderMenu() {
   folderMenu.value.open = false
 }
 
+// 区带菜单：「收起 / 展开全部分组」两条动作。第十轮把它们从区带标题那一行撤下来
+// （那一行原先整行就是这枚开关，见模板注释），落进右键菜单——与分组行的「重命名 /
+// 释怀」同一处，用户不必再学第二种入口。Alt+点击标签是这两条的快捷路。
+//
+// 菜单挂在这一整行上（不只是「分组」二字）：标题行本就是一片空白，拿它当命中区
+// 比让人瞄准两个字容易。**子元素那层不能 .stop**——右键得冒到这一行才唤得出菜单
+// （踩过一次：标签上挂了 @contextmenu.stop，菜单再也开不出来，而合成事件直接打在
+// 行上照样「通过」，只有真鼠标探针看得见）。
+const sectionMenu = ref({ open: false, x: 0, y: 0 })
+
+function openSectionMenu(e: MouseEvent) {
+  if (!library.folderTree.length) return // 没有分组，这两条动作无从谈起
+  sectionMenu.value = { open: true, x: e.clientX, y: e.clientY }
+}
+
+/** Alt+点击标签：不必走菜单就能折叠/展开全部。其余点击一概不理（标签不是按钮）。 */
+function onSectionLabelClick(e: MouseEvent) {
+  if (!e.altKey || !library.folderTree.length) return
+  e.preventDefault()
+  foldAll(!rootExpanded.value)
+}
+
+/** 全收 / 全开：设定根层开合，菜单点完即关，并把结果念给读屏。 */
+function foldAll(expandedNext: boolean) {
+  setRoot(expandedNext)
+  sectionMenu.value.open = false
+  ariaMessage.value = expandedNext ? COPY.folderExpandAll : COPY.folderCollapseAll
+}
+
+// —— 分组改名：行内输入，原地改，不弹窗 ——
+//
+// 名字的两种毛病分开答：自身非法（空、含分隔符）由 checkFolderName 判，同级重名由
+// folderNameTaken 对照当前树判。两者都在输入时即时给，故「提交后才知道」几乎不发生。
+const renamePath = ref('')
+const renameDraft = ref('')
+const renameError = ref('')
+
+/** 树里全部已存在的分组路径——同级重名就查它。 */
+const allFolderPaths = computed(() => collectFolderPaths(library.folderTree))
+
+function siblingNamesTaken(path: string, name: string): boolean {
+  return folderNameTaken(allFolderPaths.value, folderParentOf(path), name, path)
+}
+
+/** 即时校验：返回用户可读的缘由，没毛病则空串。 */
+function renameIssue(path: string, name: string): string {
+  if (!name.trim()) return ''
+  const issue = checkFolderName(name)
+  if (issue === 'separator') return COPY.folderNameInvalid
+  if (siblingNamesTaken(path, name)) return COPY.renameConflict
+  return ''
+}
+
+function startRename(path: string) {
+  closeFolderMenu()
+  renamePath.value = path
+  renameDraft.value = path.split('/').pop() ?? path
+  renameError.value = ''
+  // 改名是「对某一行做的事」，焦点也该落在那一行，键盘用户不至于悬空。
+  focusedFolder.value = path
+}
+
+function cancelRename() {
+  renamePath.value = ''
+  renameDraft.value = ''
+  renameError.value = ''
+}
+
+function onRenameInput(value: string) {
+  renameDraft.value = value
+  renameError.value = renameIssue(renamePath.value, value)
+}
+
+/**
+ * 提交改名。四个出口各自保留：自身非法与同级重名都**留在编辑态**并把缘由写在行上
+ * （不留编辑态的话，用户刚打的字会被吞掉，再想改就得从菜单重来）。
+ */
+async function commitRename() {
+  const from = renamePath.value
+  if (!from) return
+  const name = renameDraft.value.trim()
+
+  if (name === (from.split('/').pop() ?? from)) {
+    cancelRename()
+    return
+  }
+  const issue = checkFolderName(name)
+  if (issue) {
+    renameError.value = issue === 'empty' ? COPY.folderNameEmpty : COPY.folderNameInvalid
+    focusedFolder.value = from
+    return
+  }
+  if (siblingNamesTaken(from, name)) {
+    renameError.value = COPY.renameConflict
+    focusedFolder.value = from
+    return
+  }
+
+  const parent = folderParentOf(from)
+  const to = parent ? `${parent}/${name}` : name
+  const wasSelected = library.selectedFolder
+  cancelRename()
+  try {
+    await library.renameFolder(from, to)
+  } catch {
+    notify(COPY.renameFailed, 'sandal')
+    ariaMessage.value = COPY.renameFailed
+    return
+  }
+  rekeyExpanded(from, to)
+  if (isPathInFolder(wasSelected, from)) {
+    selectFolder(rewritePathPrefix(wasSelected, from, to))
+  }
+  focusedFolder.value = to
+  notify(COPY.folderRenamed)
+}
+
+// —— 分组拖拽：拖动排序 + 拖拽移动 ——
+//
+// 一条手势表达两件事，靠落点位置区分：行的上/下 1/4 是「排到前面/后面」，中间是
+// 「放进它里面」。同层前后＝排序，跨层＝移动（后端走 rename_dir，与改名同一条路）。
+//
+// 手势本身是**指针事件**（`useFolderDrag`），不是 HTML5 拖放：后者在 Windows 的
+// WebView2 里会丢 drop（拖到一半松手毫无反应），详见该 composable 的说明。
+// 判定是纯函数（`lib/folderDrag`），这里只负责「按判定去改数据」。
+const folderRowsRef = computed(() =>
+  folderRows.value.map((r) => ({ path: r.node.path, expandable: r.expandable })),
+)
+
+const {
+  drag: folderDrag,
+  over: folderDragOver,
+  onPointerDown: onRowPointerDown,
+  shouldSwallowClick: swallowRowClick,
+} = useFolderDrag({
+  getEl: () => sidebarRef.value?.querySelector<HTMLElement>('.folder-fold') ?? null,
+  getRows: () => folderRowsRef.value,
+  onStart: () => {
+    // 拿起时把落点清空：还没移动过，不该先亮一条插入线。
+    folderDragOver.value = null
+  },
+  onOver: () => {
+    // 落点已由 composable 持有的 ref 承载，模板直接读它；这里无需额外动作。
+  },
+  onDrop: (moved, path, spot) => {
+    // 只拖了没落点（指针不在任何一行上）或没真拖动，都不构成一次排序。
+    if (!moved || !path || !spot) return
+    void commitFolderDrop(path, spot)
+  },
+})
+
+/** 该父分组下、按当前显示序排列的直接子分组路径——排序与落点都按它算。 */
+function childrenInDisplayOrder(parent: string): string[] {
+  const nodes = parent ? (findNode(library.folderTree, parent)?.children ?? []) : library.folderTree
+  return nodes.map((n) => n.path)
+}
+
+/**
+ * 松手落子：把「被拖的组 + 落点」折成一次动作再执行。
+ *
+ * 判定（排到第几位 / 是否搬家 / 放进自己子树要拒）全在 `planFolderDrop` 这个纯函数里，
+ * 这里只管两件事——把拒绝的缘由说给用户听，以及把动作落到 store。
+ */
+async function commitFolderDrop(dragged: string, spot: FolderDropSpot): Promise<void> {
+  // 放进自己或自己的子树里会让整棵子树消失，后端也会拒绝——先把理由说白。
+  if (
+    spot.mode === 'inside' &&
+    (spot.path === dragged || spot.path.startsWith(`${dragged}/`))
+  ) {
+    notify(COPY.moveFolderFailed, 'sandal')
+    ariaMessage.value = COPY.moveFolderFailed
+    return
+  }
+
+  const plan = planFolderDrop(dragged, spot, childrenInDisplayOrder)
+  if (!plan) return
+
+  if (plan.kind === 'reorder') {
+    library.commitFolderOrder(new Map([[plan.parent, plan.order]]))
+    return
+  }
+
+  const { from, to, parent: targetParent } = plan
+  const name = from.split('/').pop() ?? from
+  if (folderNameTaken(allFolderPaths.value, targetParent, name, from)) {
+    notify(COPY.renameConflict, 'sandal')
+    ariaMessage.value = COPY.renameConflict
+    return
+  }
+
+  // 跨层：交给 renameFolder（它会把笔记/进度/顺序一并迁走）。
+  const wasSelected = library.selectedFolder
+  try {
+    await library.renameFolder(from, to)
+  } catch {
+    notify(COPY.moveFolderFailed, 'sandal')
+    ariaMessage.value = COPY.moveFolderFailed
+    return
+  }
+  rekeyExpanded(from, to)
+  if (isPathInFolder(wasSelected, from)) {
+    selectFolder(rewritePathPrefix(wasSelected, from, to))
+  }
+  // 目标父级展开，让用户看见东西落进去了。
+  reveal(to)
+  focusedFolder.value = to
+
+  // 顺序：源父级与目标父级都用新的显示序重写一遍，否则落点的「第几位」白算。
+  const sourceParent = folderParentOf(from)
+  const nextSource = childrenInDisplayOrder(sourceParent).filter((p) => p !== from)
+  const nextTarget = childrenInDisplayOrder(targetParent)
+  library.commitFolderOrder(
+    new Map([
+      [sourceParent, nextSource],
+      [targetParent, nextTarget],
+    ]),
+  )
+  notify(`${COPY.folderMoved} · ${targetParent || COPY.library}`, 'bamboo')
+}
+
+/**
+ * 释怀一个空分组 = 删一个空目录：纯本地、可逆，故不再走重确认弹窗（ConfirmDialog
+ * 留给删文件），而是**先做再给一条可撤销的轻提示**。撤销即按原路径重建同名目录，
+ * 并把父级重新展开、选中复原——用户回到删除前的样子。
+ */
+async function removeFolderWithUndo(path: string) {
+  const name = path.split('/').pop() ?? path
+  const parent = folderPathFromRelative(`${path}/x`)
+  const wasSelected = library.selectedFolder === path
+  try {
+    await library.removeFolder(path)
+  } catch {
+    // 兜底：read_vault 只报 .md/.html/.htm 且跳过隐藏目录，而后端对**任何**文件都
+    // 拒绝——一个只含 cover.png 的分组会显示 0 却删不掉，UI 无从预判。
+    notify(COPY.folderNotEmpty, 'sandal')
+    ariaMessage.value = COPY.folderNotEmpty
+    return
+  }
+  notify(COPY.folderRemoved, 'bamboo', {
+    label: COPY.folderRemovedUndo,
+    onClick: () => {
+      void library
+        .createFolderAt(path)
+        .then(() => {
+          if (parent) reveal(parent)
+          if (wasSelected) selectFolder(path)
+          notify(COPY.folderRestored)
+        })
+        .catch(() => notify(COPY.opFailed, 'sandal'))
+      // 「撤销」按下了：把 focus 与行序对齐，键盘用户不至于悬在半空。
+      focusedFolder.value = ''
+    },
+  })
+}
+
 async function onRemoveFolder() {
   const { path, count } = folderMenu.value
   closeFolderMenu()
-  if (!path || count > 0) return
-  try {
-    await library.removeFolder(path)
-    notify(COPY.folderRemoved, 'bamboo')
-  } catch {
-    // 兜底：read_vault 只报 .md/.html/.htm 且跳过隐藏目录，而后端对**任何**文件
-    // 都拒绝——一个只含 cover.png 的分组会显示 0 却删不掉，UI 无从预判。
-    notify(COPY.folderNotEmpty, 'sandal')
+  if (!path || count > 0) {
+    if (path && count > 0) ariaMessage.value = COPY.folderNotEmpty
+    return
   }
+  await removeFolderWithUndo(path)
+}
+
+/** 侧栏行上直接「释怀」（空分组才露出这枚按钮）。 */
+function onRowRemove(path: string) {
+  focusedFolder.value = path
+  void removeFolderWithUndo(path)
 }
 
 function onMenuMove() {
@@ -199,25 +612,60 @@ async function onConfirmRemove() {
 const creating = ref(false)
 const newFolderName = ref('')
 const newFolderInput = ref<HTMLInputElement | null>(null)
+/** 非法名的缘由。按钮**不禁用**——禁用只让人怀疑按钮坏了，说不出为什么。 */
+const newFolderError = ref('')
+
+/**
+ * 新建分组的落点由当前选中分组暗定（store 侧也是这么建的），所以必须写在输入框
+ * 上方：刚点开某个分组再点「新建分组」的人，十有八九以为自己在建顶层。
+ */
+const newFolderParentLabel = computed(() => {
+  if (!library.selectedFolder) return COPY.newFolderUnderRoot
+  return `${COPY.library} / ${library.selectedFolder.split('/').join(' / ')}`
+})
 
 function startCreating() {
   creating.value = true
   newFolderName.value = ''
+  newFolderError.value = ''
   nextTick(() => newFolderInput.value?.focus())
 }
 
 function cancelCreating() {
   creating.value = false
   newFolderName.value = ''
+  newFolderError.value = ''
 }
 
-function canCreate() {
+/** 有错则即时清掉：用户已经在改了，再摆着红字就是唠叨。 */
+function onFolderNameInput() {
+  if (newFolderError.value) newFolderError.value = ''
+}
+
+function validateFolderName(): boolean {
   const n = newFolderName.value.trim()
-  return n.length > 0 && !n.includes('/') && !n.includes('\\')
+  if (!n) {
+    newFolderError.value = COPY.folderNameEmpty
+    return false
+  }
+  if (n.includes('/') || n.includes('\\')) {
+    newFolderError.value = COPY.folderNameInvalid
+    return false
+  }
+  newFolderError.value = ''
+  return true
+}
+
+/** 输入框为空时按钮置灰（省一次无谓点击），有内容则可点、由校验给缘由。 */
+function canCreate() {
+  return newFolderName.value.trim().length > 0
 }
 
 async function submitFolder() {
-  if (!canCreate()) return
+  if (!validateFolderName()) {
+    newFolderInput.value?.focus()
+    return
+  }
   try {
     await library.createFolder(newFolderName.value.trim())
     notify(COPY.folderCreated)
@@ -236,6 +684,8 @@ function onDropResult(r: DropImportResult) {
   const cleared = r.imported > 0 && library.formatFilter !== 'all'
   if (cleared) library.formatFilter = 'all'
 
+  if (r.imported > 0) showArrival(library.selectedFolder)
+
   const parts: string[] = []
   if (r.imported) parts.push(`${COPY.importDone} ${r.imported}`)
   if (r.skipped) parts.push(`${COPY.importSkipped} ${r.skipped}`)
@@ -245,12 +695,64 @@ function onDropResult(r: DropImportResult) {
   notify(parts.join(' · '), r.imported ? 'bamboo' : 'sandal')
 }
 
+/**
+ * 新卷落在哪个分组里，原来的侧栏是无从知道的（拖入一个文件夹，几十卷静悄悄散进
+ * 各自的子目录）。给落点分组记一笔，侧栏上亮一枚竹色小点并浮出可点的提示条。
+ */
+const arrival = ref<{ folder: string; count: number } | null>(null)
+let arrivalTimer: ReturnType<typeof setTimeout> | undefined
+
+function showArrival(folder: string) {
+  arrival.value = { folder, count: library.latestArrivals.length }
+  if (arrivalTimer) clearTimeout(arrivalTimer)
+  arrivalTimer = setTimeout(() => {
+    arrival.value = null
+  }, 6000)
+}
+
+/** 提示条上的分组名：根就是「书库」。 */
+const arrivalLabel = computed(() =>
+  arrival.value?.folder
+    ? (arrival.value.folder.split('/').pop() ?? arrival.value.folder)
+    : COPY.library,
+)
+
+/** 提示条文案：`3 篇已入 · Java`。 */
+const arrivalText = computed(() =>
+  arrival.value ? `${arrival.value.count} ${COPY.pieceUnit}${COPY.arrivalIn}` : '',
+)
+
+function gotoArrival() {
+  const target = arrival.value?.folder ?? ''
+  if (target) reveal(target)
+  selectFolder(target)
+  arrival.value = null
+}
+
 const { dragging: dropDragging } = useVaultDrop(
   () => library.selectedFolder,
   onDropResult,
   // 拖动排序中不受新卷，避免正在排的序列被 refresh 打乱。
   () => !arranging.value,
 )
+
+/**
+ * 引卷落点：拖拽经过某个分组行时亮起它，遮罩文案随之从「松手引卷入藏」变成
+ * 「松手入『Java』」——否则整屏只有一句笼统的提示，用户并不知道会落在哪。
+ * 松手后落点仍是 `selectedFolder`（原生通道拿不到指针下的行），故这层提示
+ * **只作视觉预告**：让用户先点中目标分组，再拖进来的路径依然成立。
+ */
+const dropHover = ref('')
+
+watch(dropDragging, (on) => {
+  if (!on) dropHover.value = ''
+})
+
+/** 遮罩文案：有落点就报出分组名——用户得先知道「会落在哪」。 */
+const dropTargetLabel = computed(() => {
+  if (!dropHover.value) return ''
+  return dropHover.value.split('/').pop() ?? dropHover.value
+})
 
 // —— 拖动排序（手动排布）：就地拖拽 ——
 const arranging = ref(false)
@@ -401,6 +903,15 @@ function onGlobalKey(e: KeyboardEvent) {
   searchInput.value?.focus()
 }
 
+// 换分组即换内容：主区回到卷首。留着旧滚动位置的话，从长列表底部切进小分组会落在
+// 一片空白上，像「什么都没发生」。拖动排序中不动（正在编辑的序列位置就是上下文）。
+watch(
+  () => library.selectedFolder,
+  () => {
+    if (!arranging.value) mainRef.value?.scrollTo({ top: 0 })
+  },
+)
+
 // 拖动排序中若可见集被外部侥幸改动（如磁盘变化），干净退出避免把过期序列写回。
 watch(
   () => library.files.map((f) => f.relativePath).sort().join('\u0001'),
@@ -411,6 +922,41 @@ watch(
   },
 )
 
+// —— 侧栏宽度：拖右缘调整 ——
+//
+// 拖动过程只改本地 draft（即时跟手、不写盘），松手才落进设置——否则每一帧都过
+// 一次防抖写盘，且会把中间态写进 settings.json。双击手柄复位成默认宽度。
+const widthDraft = ref<number | null>(null)
+const sidebarWidth = computed(() => widthDraft.value ?? settings.sidebarWidth)
+const sidebarStyle = computed(() => ({ width: `${sidebarWidth.value}px` }))
+
+function onResizeStart(e: PointerEvent) {
+  const startX = e.clientX
+  const startWidth = sidebarWidth.value
+  const el = e.currentTarget as HTMLElement
+  el.setPointerCapture(e.pointerId)
+
+  const onMove = (m: PointerEvent) => {
+    widthDraft.value = clampSidebarWidth(startWidth + (m.clientX - startX))
+  }
+  const onUp = () => {
+    el.releasePointerCapture?.(e.pointerId)
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    const settled = widthDraft.value
+    widthDraft.value = null
+    if (settled !== null) settings.update({ sidebarWidth: settled })
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
+/** 双击复位：拖窄了想回默认，不必再对着像素找位置。 */
+function resetSidebarWidth() {
+  widthDraft.value = null
+  settings.update({ sidebarWidth: DEFAULT_SETTINGS.sidebarWidth })
+}
+
 onMounted(() => {
   library.refresh()
   window.addEventListener('focus', onWindowFocus)
@@ -419,6 +965,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (drag.value) cancelDrag()
+  if (arrivalTimer) clearTimeout(arrivalTimer)
   window.removeEventListener('focus', onWindowFocus)
   window.removeEventListener('keydown', onGlobalKey)
 })
@@ -492,71 +1039,186 @@ onBeforeUnmount(() => {
 
     <div v-else class="flex min-h-0 flex-1">
       <aside
-        class="hidden h-full w-56 shrink-0 overflow-y-auto p-4 transition-opacity duration-300 md:block"
+        ref="sidebarRef"
+        class="sidebar relative hidden h-full shrink-0 overflow-y-auto p-3 transition-opacity duration-300 md:block"
         :class="arranging ? 'pointer-events-none opacity-40' : ''"
+        :style="sidebarStyle"
       >
-        <button
-          class="mb-2 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10 hover:text-ink"
-          :class="{ 'bg-bamboo/15 font-medium text-ink': !library.selectedFolder }"
-          @click="library.selectedFolder = ''"
-        >
-          <span class="flex items-center gap-1.5">
-            <ZIcon name="library" :size="14" class="shrink-0 text-bamboo/70" />
-            {{ COPY.library }}
-          </span>
-          <span class="text-xs tabular-nums text-dusk">{{ library.totalCount }}</span>
-        </button>
-
-        <div class="mb-2">
+        <!-- 侧栏的排版契约在 motion.css 里：书库行、区带标题、树行共用同一条
+             三列栅格（折页槽 · 文字列 · 尾列），故「书库」二字、区带标题与分组名
+             必然落在同一条竖线上——对齐靠栅格，不靠逐个调间距。 -->
+        <nav aria-label="书库导航" class="flex flex-col">
+          <!-- 区带一 · 书库（根视图）。它是**一块可点中的地面**，不是树的条目：
+               不带折页（那会让人以为折页控制的是它自己），靠书架图标 + 14px 字表态。
+               回到书库根由此一条明路解决，故底部不再挂「回到书库」按钮。 -->
           <button
-            v-if="!creating"
-            class="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-ink-soft transition-colors duration-200 hover:bg-bamboo/10 hover:text-ink"
-            @click="startCreating"
+            class="side-row side-row-root"
+            :class="!library.selectedFolder ? 'side-row-on' : ''"
+            :title="COPY.scopeBack"
+            @click="backToLibrary"
           >
-            <ZIcon name="plus" :size="14" />
-            {{ COPY.newFolder }}
+            <span class="side-cv">
+              <ZIcon name="library" :size="16" class="side-root-icon" />
+            </span>
+            <span class="side-name side-title truncate">{{ COPY.library }}</span>
+            <span class="side-fill"></span>
+            <span class="side-count" :class="!library.selectedFolder ? 'text-ink-soft' : ''">
+              {{ library.totalCount }}
+            </span>
           </button>
-          <div v-else class="flex flex-col gap-1.5">
+
+          <!-- 区带二 · 分组。区带标题与条目同栅格、同起笔线，只是矮一档、小一号：
+               标签而非条目，故不与下面的分组名争重心。
+
+               **这一行不再挂「全收 / 全开」开关**（第十轮）。第九轮把整行做成那枚开关，
+               用起来才发现开关本身不该常驻：它管的是「整份分组列表的可见性」，而这份
+               列表正是侧栏的全部内容——收起它不解决任何事（要找的是分组，不是把分组
+               藏起来），却把 32px 的行变成了行级按钮，还得靠一枚折页解释状态。全收 /
+               全开退成两条**动作**，落在这一行的右键菜单里（Alt+点击标签是它的快捷
+               路，见 onSectionKey）。于是这一行只剩两样东西：标签与 ＋。 -->
+          <div class="side-section">
+            <div class="side-head" @contextmenu.stop.prevent="openSectionMenu($event)">
+              <!-- Alt+点击标签＝收起 / 展开全部：菜单那两条动作的快捷路，写进 title。
+                   右键**不要**在这里 .stop——它得冒到这一行上去唤区带菜单
+                   （踩过一次：标签上挂 .stop 之后菜单再也开不出来）。 -->
+              <h2
+                class="side-name side-title side-head-label truncate"
+                :title="COPY.folderFoldAllHint"
+                @click="onSectionLabelClick"
+              >
+                {{ COPY.groupSection }}
+              </h2>
+
+              <button
+                v-if="!creating"
+                type="button"
+                class="side-head-action"
+                :title="COPY.newFolder"
+                :aria-label="COPY.newFolder"
+                @click="startCreating"
+              >
+                <ZIcon name="plus" :size="15" :stroke-width="1.4" />
+              </button>
+            </div>
+
+          <div v-if="creating" class="side-form">
+            <!-- 落点由当前选中分组暗定；不说出来就一定会有人建错层 -->
+            <p class="text-[11px] leading-snug text-ink-soft/85">
+              {{ COPY.newFolderUnder }}
+              <span class="text-ink-soft">{{ newFolderParentLabel }}</span>
+            </p>
             <input
               ref="newFolderInput"
               v-model="newFolderName"
               :placeholder="COPY.folderName"
+              :aria-invalid="!!newFolderError"
               class="w-full rounded-lg bg-paper-deep/60 px-2.5 py-1.5 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
               @keydown.enter="submitFolder"
               @keydown.esc="cancelCreating"
+              @input="onFolderNameInput"
             />
-            <div class="flex gap-1">
+            <!-- 非法名说清缘由：按钮不禁用——禁用不解释「为什么点不动」 -->
+            <p v-if="newFolderError" class="text-[11px] text-sandal">
+              {{ newFolderError }}
+            </p>
+            <div class="flex gap-1.5">
               <button
-                class="flex-1 rounded-md bg-bamboo px-2 py-1 text-xs text-paper transition-opacity hover:opacity-90 disabled:opacity-40"
+                class="side-form-btn bg-bamboo text-paper hover:opacity-90 disabled:opacity-40"
                 :disabled="!canCreate()"
                 @click="submitFolder"
               >
                 {{ COPY.save }}
               </button>
               <button
-                class="flex-1 rounded-md px-2 py-1 text-xs text-ink-soft transition-colors hover:text-ink"
+                class="side-form-btn text-ink-soft hover:bg-bamboo/10 hover:text-ink"
                 @click="cancelCreating"
               >
                 {{ COPY.cancel }}
               </button>
             </div>
           </div>
+
+          <!-- 判据是**可见行**而不是树里有没有分组：全收之后树仍在（13 个分组一条不少），
+               只是行序列空了——用 `library.folderTree.length` 会把「收起来了」当成
+               「一切正常」，于是整区只剩标签 + ＋ 一片空白，用户看不出发生了什么。 -->
+          <FolderTree
+            v-if="folderRows.length"
+            :rows="folderRows"
+            :selected="library.selectedFolder"
+            :expanded="expanded"
+            :open="rootExpanded"
+            :dropping="dropDragging"
+            :drop-hover="dropHover"
+            :active-path="activeRowPath"
+            :renaming="renamePath"
+            :rename-draft="renameDraft"
+            :rename-error="renameError"
+            :dragging-folder="folderDrag?.path ?? ''"
+            :drag-over="folderDragOver ?? undefined"
+            :swallow-click="swallowRowClick()"
+            @select="onFolderSelect"
+            @toggle="onFolderToggle"
+            @menu="openFolderMenu"
+            @remove="onRowRemove"
+            @keydown="onRowKeydown"
+            @focus-row="focusedFolder = $event"
+            @drop-hover="dropHover = $event"
+            @drop-leave="dropHover = ''"
+            @rename-input="onRenameInput"
+            @rename-commit="commitRename"
+            @rename-cancel="cancelRename"
+            @row-pointer-down="onRowPointerDown"
+          />
+          <!-- 空着的这一区有两种缘由，不能混为一句话：
+               · 全收之后没有可见行——「尚无分组 · 点 ＋ 建一个」就是撒谎（库里有分组），
+                 得说清「收起来了」并指回那枚开关；
+               · 真的一个分组都没有——这才说「点 ＋ 建一个」。
+               缩进到名称起笔线，好让它读起来像「这一区里现在还空着」，而不是另一块居中文案。 -->
+          <p
+            v-else
+            class="side-empty flex flex-col items-start gap-2 py-3 pl-1.5 text-xs text-dusk"
+          >
+            <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
+            <span>
+              {{ library.folderTree.length ? COPY.foldersFolded : COPY.emptyFolders }}
+            </span>          </p>
         </div>
 
-        <FolderTree
-          v-if="library.folderTree.length"
-          :nodes="library.folderTree"
-          :selected="library.selectedFolder"
-          @select="toggleFolder"
-          @menu="openFolderMenu"
-        />
-        <p
-          v-else
-          class="flex flex-col items-center px-2.5 py-4 text-xs text-dusk"
-        >
-          <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-dusk/60"></span>
-          <span class="mt-3">{{ COPY.emptyFolders }}</span>
-        </p>
+        <!-- 导入落点提示：新卷落在哪个分组里，原来的侧栏无从知道 -->
+        <Transition name="fade-slide">
+          <button
+            v-if="arrival"
+            class="side-row mt-1.5 border border-bamboo/25 bg-bamboo/10 text-xs text-ink-soft hover:text-ink"
+            @click="gotoArrival"
+          >
+            <span class="side-cv">
+              <span class="zen-breathe h-1.5 w-1.5 rounded-full bg-bamboo/70"></span>
+            </span>
+            <span class="min-w-0 truncate text-left">
+              {{ arrivalText }} {{ arrivalLabel }}
+            </span>
+            <ZIcon name="chevron-right" :size="12" class="justify-self-end text-dusk" />
+          </button>
+        </Transition>
+        </nav>
+
+        <!-- 宽度手柄：贴在侧栏右缘的一条窄带，平时隐形、悬停才浮出一根竹色细线。
+             拖动排序中整栏已 pointer-events-none，手柄随之失效——那会儿宽度不是重点。 -->
+        <div
+          class="sidebar-resize"
+          role="separator"
+          aria-orientation="vertical"
+          :aria-label="COPY.sidebarWidth"
+          :aria-valuenow="sidebarWidth"
+          :aria-valuemin="SIDEBAR_MIN"
+          :aria-valuemax="SIDEBAR_MAX"
+          tabindex="0"
+          :title="COPY.sidebarWidthHint"
+          @pointerdown.prevent="onResizeStart"
+          @dblclick="resetSidebarWidth"
+          @keydown.left.prevent="settings.update({ sidebarWidth: clampSidebarWidth(sidebarWidth - 16) })"
+          @keydown.right.prevent="settings.update({ sidebarWidth: clampSidebarWidth(sidebarWidth + 16) })"
+        ></div>
       </aside>
 
       <main ref="mainRef" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
@@ -669,7 +1331,7 @@ onBeforeUnmount(() => {
           <nav aria-label="分组路径" class="flex min-w-0 items-center gap-0.5">
             <button
               class="shrink-0 rounded-md px-1.5 py-0.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-              @click="library.selectedFolder = ''"
+              @click="backToLibrary"
             >
               {{ COPY.library }}
             </button>
@@ -684,7 +1346,7 @@ onBeforeUnmount(() => {
                 v-if="i < crumbs.length - 1"
                 class="min-w-0 rounded-md px-1.5 py-0.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
                 :title="c.path"
-                @click="library.selectedFolder = c.path"
+                @click="selectFolder(c.path)"
               >
                 <span class="block truncate">{{ c.name }}</span>
               </button>
@@ -793,6 +1455,14 @@ onBeforeUnmount(() => {
       :y="folderMenu.y"
       @close="closeFolderMenu"
     >
+      <!-- 重命名：分组名与路径都是本地操作，是这一区里最常用的一项，故排在最前。 -->
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        @click="startRename(folderMenu.path)"
+      >
+        <ZIcon name="edit" :size="15" class="shrink-0 text-bamboo" />
+        {{ COPY.renameFolder }}
+      </button>
       <!-- 非空分组置灰：后端对整棵子树要求无文件，「点了必然失败」不如一看就懂。
            缘由**就近写在按钮里**而非挂 title——disabled 元素在 WebView2 里收不到
            指针事件，tooltip 根本不会弹出，写了等于没写。 -->
@@ -819,6 +1489,46 @@ onBeforeUnmount(() => {
             {{ COPY.folderNotEmpty }}
           </span>
         </span>
+      </button>
+    </ContextMenu>
+
+    <!-- 区带 · 分组：整区开合的两条动作。它们原先长在区带标题那一行上（那行整行
+         是一枚开关），第十轮撤下来放进这里：开关管的是「整份分组列表的可见性」，
+         而这份列表正是侧栏的全部内容——收起它不解决任何事，却要一行常驻按钮去换。
+         已处于目标状态的那一条置灰：不是「不能点」，是「点了也没变化」。 -->
+    <ContextMenu
+      :open="sectionMenu.open"
+      :x="sectionMenu.x"
+      :y="sectionMenu.y"
+      @close="sectionMenu.open = false"
+    >
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-bamboo/10 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        :class="rootExpanded ? 'text-ink-soft hover:text-ink' : 'text-dusk'"
+        :disabled="!rootExpanded"
+        @click="foldAll(false)"
+      >
+        <ZIcon
+          name="chevron-right"
+          :size="15"
+          class="shrink-0"
+          :class="rootExpanded ? 'text-bamboo' : 'text-dusk/50'"
+        />
+        {{ COPY.folderCollapseAll }}
+      </button>
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-bamboo/10 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        :class="rootExpanded ? 'text-dusk' : 'text-ink-soft hover:text-ink'"
+        :disabled="rootExpanded"
+        @click="foldAll(true)"
+      >
+        <ZIcon
+          name="chevron-down"
+          :size="15"
+          class="shrink-0"
+          :class="rootExpanded ? 'text-dusk/50' : 'text-bamboo'"
+        />
+        {{ COPY.folderExpandAll }}
       </button>
     </ContextMenu>
 
@@ -902,12 +1612,22 @@ onBeforeUnmount(() => {
               class="text-bamboo"
             />
             <p class="mt-4 font-serif text-lg text-ink">
-              {{ COPY.dropToImport }}
+              {{ dropTargetLabel ? `${COPY.dropToNamed}「${dropTargetLabel}」` : COPY.dropToImport }}
             </p>
-            <p class="mt-1 text-xs text-dusk">{{ COPY.importExtHint }}</p>
+            <p class="mt-1 text-xs text-dusk">
+              {{
+                dropTargetLabel
+                  ? `${COPY.importTo}${dropTargetLabel}`
+                  : COPY.importExtHint
+              }}
+            </p>
           </div>
         </div>
       </Transition>
     </Teleport>
+
+    <!-- 读屏活口：禁用态的元素收不到 tooltip、Toast 又常常一闪而过，
+         把「为什么不能做」这句话单独留个通道。 -->
+    <p class="sr-only" role="status" aria-live="polite">{{ ariaMessage }}</p>
   </div>
 </template>

@@ -183,6 +183,61 @@ pub fn notes_delete_document(dir: String, relative_path: String) -> Result<(), S
     Ok(())
 }
 
+/// 分组改名 / 移动：把整棵子树内所有笔记的路径前缀换成新前缀。
+///
+/// 目标位置可能**已经有**同名文档的笔记（改名前就在那儿）：`relative_path` 上没有
+/// 唯一约束，直接 UPDATE 会留下两套笔记挂在同一路径上，读出来是重复的。所以先删掉
+/// 目标侧的同名行，再把源侧搬过去——两者在一个事务里，要么全成要么全不动。
+/// 这是数据合并（丢的是目标侧旧笔记），但改名是用户显式发起且立刻看得见结果的操作，
+/// 比留一串重复笔记更可解释。
+#[tauri::command]
+pub fn notes_rename_folder(dir: String, from: String, to: String) -> Result<(), String> {
+    if from.is_empty() || to.is_empty() {
+        return Err("非法分组路径".into());
+    }
+    let mut conn = open_notes_db(&dir)?;
+    let from_prefix = format!("{from}/");
+    let to_prefix = format!("{to}/");
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    // 目标侧先清场：只清与源侧同名的那几篇，不动目标子树里别的笔记。
+    let mut victims: Vec<String> = Vec::new();
+    {
+        let mut stmt = tx
+            .prepare("SELECT relative_path FROM notes WHERE relative_path LIKE ?1 || '%'")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![from_prefix], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        for r in rows {
+            let src: String = r.map_err(|e| e.to_string())?;
+            // `from/a.md` → `to/a.md`；`from/x/a.md` → `to/x/a.md`
+            victims.push(format!("{}{}", to_prefix, &src[from_prefix.len()..]));
+        }
+    }
+    for v in &victims {
+        tx.execute("DELETE FROM notes WHERE relative_path = ?1", params![v])
+            .map_err(|e| e.to_string())?;
+    }
+
+    // 源侧整棵子树搬过去：`from` 本身与 `from/...` 两种形态都要覆盖。
+    tx.execute(
+        "UPDATE notes SET relative_path = ?1 || substr(relative_path, ?2)
+         WHERE relative_path = ?3 OR relative_path LIKE ?4 || '%'",
+        params![
+            to_prefix,
+            from_prefix.len() as i64 + 1,
+            from,
+            from_prefix
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,6 +340,71 @@ mod tests {
         let list = notes_list(dir.clone(), "d.md".into()).unwrap();
         assert!(list[0].anchor.is_none());
         assert_eq!(list[0].quote, "");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 分组改名：整棵子树内的笔记前缀一起换；目标侧同名文档的旧笔记被合并掉。
+    #[test]
+    fn rename_folder_migrates_subtree() {
+        let dir = temp_dir("rename-folder");
+        notes_add(dir.clone(), sample_note("n1", "Java/并发.md")).unwrap();
+        notes_add(dir.clone(), sample_note("n2", "Java/深水区/锁.md")).unwrap();
+        notes_add(dir.clone(), sample_note("n3", "Redis/持久化.md")).unwrap();
+        // 目标位置本来就有同名文档的笔记（改名前就在那儿）
+        notes_add(dir.clone(), sample_note("old", "JVM/并发.md")).unwrap();
+
+        notes_rename_folder(dir.clone(), "Java".into(), "JVM".into()).unwrap();
+
+        // 源侧清空
+        assert!(notes_list(dir.clone(), "Java/并发.md".into()).unwrap().is_empty());
+        // 本层与更深一层都换了前缀
+        let a = notes_list(dir.clone(), "JVM/并发.md".into()).unwrap();
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].id, "n1");
+        let b = notes_list(dir.clone(), "JVM/深水区/锁.md".into()).unwrap();
+        assert_eq!(b[0].id, "n2");
+        // 兄弟分组不受影响
+        assert_eq!(notes_list(dir.clone(), "Redis/持久化.md".into()).unwrap().len(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 前缀匹配不能误伤「前缀相同但不同层」的分组：`Java` 改名不该碰到 `JavaScript`。
+    #[test]
+    fn rename_folder_respects_path_boundary() {
+        let dir = temp_dir("rename-boundary");
+        notes_add(dir.clone(), sample_note("n1", "JavaScript/原型.md")).unwrap();
+        notes_add(dir.clone(), sample_note("n2", "Java/并发.md")).unwrap();
+
+        notes_rename_folder(dir.clone(), "Java".into(), "JVM".into()).unwrap();
+
+        assert_eq!(
+            notes_list(dir.clone(), "JavaScript/原型.md".into()).unwrap().len(),
+            1,
+            "同前缀的兄弟分组不该被搬走"
+        );
+        assert_eq!(notes_list(dir.clone(), "JVM/并发.md".into()).unwrap().len(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 搬家到已有内容的分组下：目标子树里**不同名**的笔记要留着。
+    #[test]
+    fn rename_folder_merges_into_occupied_target() {
+        let dir = temp_dir("rename-merge");
+        notes_add(dir.clone(), sample_note("moving", "A/同一篇.md")).unwrap();
+        notes_add(dir.clone(), sample_note("kept", "B/另一篇.md")).unwrap();
+        notes_add(dir.clone(), sample_note("clash", "B/同一篇.md")).unwrap();
+
+        notes_rename_folder(dir.clone(), "A".into(), "B".into()).unwrap();
+
+        // 目标侧同名的那条被合并（保源侧）
+        let same = notes_list(dir.clone(), "B/同一篇.md".into()).unwrap();
+        assert_eq!(same.len(), 1);
+        assert_eq!(same[0].id, "moving");
+        // 目标侧不同名的笔记原样留着
+        assert_eq!(notes_list(dir.clone(), "B/另一篇.md".into()).unwrap()[0].id, "kept");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

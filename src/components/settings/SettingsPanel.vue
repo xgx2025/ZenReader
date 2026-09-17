@@ -26,6 +26,7 @@ import type {
   ReminderAction,
   ZenEntryStyle,
 } from '@/types/settings'
+import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '@/types/settings'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -93,6 +94,12 @@ function onRange(e: Event, key: RangeKey) {
 
 function onToggle(key: ToggleKey) {
   settings.update({ [key]: !settings[key] } as Partial<ReaderSettings>)
+}
+
+/** 侧栏宽度：与右缘手柄共用同一个夹取函数，故两条路写下的值都合法。 */
+function onSidebarWidth(e: Event) {
+  const value = clampSidebarWidth(Number((e.target as HTMLInputElement).value))
+  settings.update({ sidebarWidth: value })
 }
 
 async function pickVaultFolder() {
@@ -578,6 +585,25 @@ onBeforeUnmount(closePreview)
           >
             {{ COPY.clearFolder }}
           </button>
+        </div>
+
+        <!-- 侧栏宽度：除了右缘那根可拖的手柄，这里再给一处说得出口的入口——
+             手柄是「知道才用得上」的，设置项是「找得到」的。 -->
+        <div class="mt-3 flex items-center gap-2" :class="settings.vaultPath ? '' : 'opacity-40'">
+          <span class="shrink-0 text-xs text-ink-soft">{{ COPY.sidebarWidth }}</span>
+          <input
+            type="range"
+            class="min-w-0 flex-1 accent-bamboo"
+            :min="SIDEBAR_MIN"
+            :max="SIDEBAR_MAX"
+            step="4"
+            :value="settings.sidebarWidth"
+            :disabled="!settings.vaultPath"
+            @input="onSidebarWidth"
+          />
+          <span class="w-10 shrink-0 text-right text-xs tabular-nums text-dusk">
+            {{ settings.sidebarWidth }}
+          </span>
         </div>
       </div>
 

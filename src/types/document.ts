@@ -75,4 +75,9 @@ export interface FolderNode {
    * `count === 0` 恰好等价于后端的可释怀判定（整个子树无文件）。
    */
   count: number
+  /**
+   * 本层直属卷数（不含子分组）。下钻模型下右侧只列本层，`here !== count`
+   * 即是「点进去会比侧栏数字少」的成因——行内提示与 title 都据它分辨。
+   */
+  here: number
 }

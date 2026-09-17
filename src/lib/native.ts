@@ -79,6 +79,14 @@ export const nativeFs = {
     return invoke('remove_folder', { dir, relativePath })
   },
 
+  /**
+   * 重命名 / 移动一个分组：整棵子树随目录一起搬。`from`/`to` 都是相对书库根的
+   * `/` 分隔路径；后端会拒绝非法路径、搬进自身子树、以及目标已存在的名字。
+   */
+  renameDir(dir: string, from: string, to: string): Promise<void> {
+    return invoke('rename_dir', { dir, from, to })
+  },
+
   /** Read the persisted settings JSON from the app config dir; null if absent. */
   readSettings(): Promise<string | null> {
     return invoke<string | null>('read_settings')
@@ -123,5 +131,10 @@ export const nativeNotes = {
 
   deleteDocument(dir: string, relativePath: string): Promise<void> {
     return invoke('notes_delete_document', { dir, relativePath })
+  },
+
+  /** 分组改名 / 搬家：整棵子树内笔记的路径前缀一起换。 */
+  renameFolder(dir: string, from: string, to: string): Promise<void> {
+    return invoke('notes_rename_folder', { dir, from, to })
   },
 }

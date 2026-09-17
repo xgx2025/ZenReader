@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isPathInFolder,
+  rewritePathPrefix,
   titleFromName,
   isHtmlFile,
   isDocFile,
@@ -62,5 +64,41 @@ describe('vault · html 拓宽', () => {
     expect(resolveHtmlTitle(null, 'default.HTML')).toBe('default')
     expect(resolveHtmlTitle('标题', 'document.html')).toBe('document')
     expect(resolveHtmlTitle('', 'main.html')).toBe('main')
+  })
+})
+
+/**
+ * 分组改名 / 搬家要同时改写四份按路径存的东西（笔记、阅读进度、卡片序、分组序），
+ * 它们共用这一条前缀改写。边界错一处就是「改了名，进度丢了」这类静默数据事故。
+ */
+describe('vault · 路径前缀改写', () => {
+  it('分组自身与其整棵子树都换前缀', () => {
+    expect(rewritePathPrefix('Java', 'Java', 'JVM')).toBe('JVM')
+    expect(rewritePathPrefix('Java/并发.md', 'Java', 'JVM')).toBe('JVM/并发.md')
+    expect(rewritePathPrefix('Java/深水区/锁.md', 'Java', 'JVM')).toBe('JVM/深水区/锁.md')
+  })
+
+  it('不碰同前缀的兄弟分组（Java 改名不该动 JavaScript）', () => {
+    expect(rewritePathPrefix('JavaScript/原型.md', 'Java', 'JVM')).toBe(
+      'JavaScript/原型.md',
+    )
+  })
+
+  it('不在前缀下的原样返回', () => {
+    expect(rewritePathPrefix('Redis/持久化.md', 'Java', 'JVM')).toBe('Redis/持久化.md')
+    expect(rewritePathPrefix('Java', '', 'JVM')).toBe('Java') // 空 from 不做任何事
+  })
+
+  it('搬进另一层时新前缀也跟着变', () => {
+    expect(rewritePathPrefix('Java/深水区/锁.md', 'Java', '归档/Java')).toBe(
+      '归档/Java/深水区/锁.md',
+    )
+  })
+
+  it('isPathInFolder 认自身与子树，不认同前缀兄弟', () => {
+    expect(isPathInFolder('Java', 'Java')).toBe(true)
+    expect(isPathInFolder('Java/并发.md', 'Java')).toBe(true)
+    expect(isPathInFolder('JavaScript/原型.md', 'Java')).toBe(false)
+    expect(isPathInFolder('任意', '')).toBe(true) // 空路径 = 书库根，恒真
   })
 })

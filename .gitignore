@@ -10,9 +10,14 @@ coverage
 src-tauri/target/
 src-tauri/gen/
 
+# UI 预览台的截图与量测产物（tools/ui-preview/）
+tmp/
+
 # 设计文档，不入库
 doc/
 # Claude AI 会话缓存
 .claude/
 # Zed 编辑器本地会话数据
 .zcode/
+# WorkBuddy AI 本地会话数据与记忆
+.workbuddy-ai/
