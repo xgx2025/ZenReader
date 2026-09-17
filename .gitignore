@@ -19,3 +19,5 @@ doc/
 .claude/
 # Zed 编辑器本地会话数据
 .zcode/
+# WorkBuddy AI 本地会话数据与记忆
+.workbuddy-ai/
