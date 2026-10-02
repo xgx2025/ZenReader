@@ -34,6 +34,7 @@ node tools/ui-preview/measure.mjs --url=http://127.0.0.1:5199/
 | `--theme=light\|sepia\|dark` | 三套主题各截一张 |
 | `--expanded='{"MySQL/日志":false}'` | 预置侧栏展开态，直接截到深层的树 |
 | `--hover="<选择器>"` | 截图前把**真实**指针移到该元素中心（`:hover` 只有真指针认，合成事件无效） |
+| `--click="<选择器>"` | 截图前用 CDP 真鼠标点击目标；可与 `--script` 配合验新表单的提交 |
 | `--script="…"` | 截图前在页面里跑一段表达式；可 `import('/tools/ui-preview/xxx.mjs')` 复用 |
 
 ## 现成的场景脚本
@@ -49,6 +50,7 @@ node tools/ui-preview/measure.mjs --url=http://127.0.0.1:5199/
 | `scenario-section-menu-open.mjs` | 截图前把区带菜单打开（合成 `contextmenu` 足够——菜单只认坐标） |
 | `scenario-section-folded.mjs` | 截图前真的执行一次「收起全部分组」，看收起后的版面与空态文案 |
 | `scenario-empty-folders.mjs` | 一个分组都没有时的区带与空态：劫持一次 `read_vault` 返回空 `dirs`，不改替身默认布景 |
+| `scenario-knowledge-form.mjs` | 预填知识图的新主题表单，配合 `--click=".knowledge-inspector button.bg-bamboo"` 验真实鼠标提交 |
 
 `--theme` / `--hover` / `--script` 三个开关可叠加：`--hover=.side-head-action` 加
 `--clip` 就是一张「悬停态特写」。区带标题那两轮（`doc/sidebar-ux.md` 第九、第十轮）

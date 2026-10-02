@@ -36,6 +36,7 @@ export type IconName =
   | 'about'
   | 'library'
   | 'grip'
+  | 'connections'
 
 const props = withDefaults(
   defineProps<{ name: IconName; size?: number; strokeWidth?: number }>(),
@@ -90,6 +91,7 @@ const ICONS: Record<IconName, string> = {
   about: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 11v5"/>',
   // 拖拽手柄：六枚实心小点（同 more 画法）。
   grip: '<circle cx="8" cy="6" r="1.25" fill="currentColor"/><circle cx="16" cy="6" r="1.25" fill="currentColor"/><circle cx="8" cy="12" r="1.25" fill="currentColor"/><circle cx="16" cy="12" r="1.25" fill="currentColor"/><circle cx="8" cy="18" r="1.25" fill="currentColor"/><circle cx="16" cy="18" r="1.25" fill="currentColor"/>',
+  connections: '<circle cx="5" cy="12" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="18" cy="19" r="2"/><path d="M7 11 16 6M7 13l9 5M18 7v10"/>',
   // 实底书架（书库根行专用）：1024 视箱的填充图形，逐 path 覆盖
   // svg 级的 fill=none/stroke 默认，视箱见 ICON_VIEWBOX。
   library:

@@ -984,6 +984,15 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="flex items-center gap-1.5">
+        <RouterLink
+          v-if="library.hasVault"
+          to="/knowledge"
+          class="mr-2 inline-flex items-center gap-2 rounded-full border border-bamboo/25 bg-bamboo/8 px-4 py-1.5 text-sm text-bamboo transition-colors hover:bg-bamboo/15"
+          :title="COPY.knowledgeMapHint"
+        >
+          <ZIcon name="connections" :size="16" />
+          {{ COPY.knowledgeMap }}
+        </RouterLink>
         <button
           v-if="library.hasVault"
           class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft"

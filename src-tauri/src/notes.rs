@@ -28,12 +28,14 @@ pub struct Note {
 
 /// 打开书库下的 notes.db：建目录、建连接、设 WAL、幂等建表建索引。
 /// 每次命令按需开关连接——本地 SQLite 开销极小，且天然随书库切换。
-fn open_notes_db(dir: &str) -> Result<Connection, String> {
+pub(crate) fn open_notes_db(dir: &str) -> Result<Connection, String> {
     let zen = Path::new(dir).join(".zenreader");
     std::fs::create_dir_all(&zen).map_err(|e| e.to_string())?;
     let conn = Connection::open(zen.join("notes.db")).map_err(|e| e.to_string())?;
     // WAL：读写不互斥；崩溃安全由默认 synchronous=FULL 保证。
     conn.pragma_update(None, "journal_mode", "WAL")
+        .map_err(|e| e.to_string())?;
+    conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| e.to_string())?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS notes (
@@ -84,6 +86,24 @@ pub fn notes_list(dir: String, relative_path: String) -> Result<Vec<Note>, Strin
     let rows = stmt
         .query_map([relative_path], row_to_note)
         .map_err(|e| e.to_string())?;
+    let mut notes = Vec::new();
+    for row in rows {
+        notes.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(notes)
+}
+
+/// 全库觉悟供知识图关联；仍返回原有的稳定 note id 与实时路径。
+#[tauri::command]
+pub fn notes_list_all(dir: String) -> Result<Vec<Note>, String> {
+    let conn = open_notes_db(&dir)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, relative_path, kind, quote, note, anchor_json, created_at, updated_at
+             FROM notes ORDER BY created_at DESC, rowid DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], row_to_note).map_err(|e| e.to_string())?;
     let mut notes = Vec::new();
     for row in rows {
         notes.push(row.map_err(|e| e.to_string())?);

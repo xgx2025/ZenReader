@@ -36,6 +36,35 @@
     sidebarWidth: 224,
   }
 
+  // 仅供知识图视觉与交互预览；真实桌面端始终从书库内 notes.db 读取。
+  var demoNotes = [
+    { id: 'demo-n1', relativePath: 'Java/JMM 与 happens-before.md', kind: 'note', quote: '可见性与顺序性', note: '并发正确性先要说清谁能看见谁。', anchor: null, createdAt: '2026-01-10', updatedAt: '2026-01-10' },
+    { id: 'demo-n2', relativePath: 'Redis/分布式锁的坑.md', kind: 'note', quote: '锁的安全边界', note: '锁解决竞争，却不能代替故障后的状态校验。', anchor: null, createdAt: '2026-02-12', updatedAt: '2026-02-12' },
+    { id: 'demo-n3', relativePath: 'MySQL/WAL机制/崩溃恢复流程.md', kind: 'note', quote: '崩溃恢复', note: '可靠性不是不出错，而是能从中断处恢复。', anchor: null, createdAt: '2026-03-08', updatedAt: '2026-03-08' },
+  ]
+  var demoKnowledge = {
+    topics: [
+      { id: 't1', title: '并发为什么难以推理？', domain: 'Java 与并发', summary: '先划清共享状态，再确认可见性与执行顺序。局部正确不等于整体安全。', createdAt: '2026-01-10', updatedAt: '2026-05-22', revisions: [] },
+      { id: 't2', title: '锁能保证什么？', domain: 'Java 与并发', summary: '锁限定同时进入的人，但故障后的状态仍需要校验。', createdAt: '2026-02-12', updatedAt: '2026-04-14', revisions: [] },
+      { id: 't3', title: '何时引入缓存？', domain: '数据与存储', summary: '先辨别瓶颈，再考虑一致性、失效和回源成本。', createdAt: '2026-02-18', updatedAt: '2026-02-18', revisions: [] },
+      { id: 't4', title: '系统如何从故障中恢复？', domain: '数据与存储', summary: '需要持久记录、明确恢复点，并知道哪些操作可以重放。', createdAt: '2026-03-08', updatedAt: '2026-03-08', revisions: [] },
+      { id: 't5', title: '什么决定系统的可靠性？', domain: '架构与设计', summary: '可靠性来自边界明确、故障可见，以及恢复路径经过验证。', createdAt: '2026-03-22', updatedAt: '2026-06-20', revisions: [{ summary: '可靠的系统应该避免故障。', savedAt: '2026-03-22' }] },
+      { id: 't6', title: '如何划分服务边界？', domain: '架构与设计', summary: '', createdAt: '2026-04-06', updatedAt: '2026-04-06', revisions: [] },
+    ],
+    relations: [
+      { id: 'r1', fromId: 't1', toId: 't2', kind: 'depends' },
+      { id: 'r2', fromId: 't2', toId: 't5', kind: 'related' },
+      { id: 'r3', fromId: 't4', toId: 't5', kind: 'depends' },
+      { id: 'r4', fromId: 't3', toId: 't5', kind: 'contrasts' },
+    ],
+    evidence: [
+      { topicId: 't1', noteId: 'demo-n1', role: 'supports' },
+      { topicId: 't2', noteId: 'demo-n2', role: 'questions' },
+      { topicId: 't4', noteId: 'demo-n3', role: 'supports' },
+      { topicId: 't5', noteId: 'demo-n3', role: 'extends' },
+    ],
+  }
+
   /**
    * 仿真的书库清单。形状与 Rust `read_vault` 一致：`dirs` 是相对书库根的
    * `/` 分隔路径（含空目录），`files[].relativePath` 同理。
@@ -214,6 +243,13 @@
           return Promise.resolve(null)
         case 'notes_list':
           return Promise.resolve([])
+        case 'notes_list_all':
+          return Promise.resolve(demoNotes)
+        case 'knowledge_load':
+          return Promise.resolve(JSON.stringify(demoKnowledge))
+        case 'knowledge_save':
+          demoKnowledge = JSON.parse(args.content)
+          return Promise.resolve(null)
         // 改名 / 搬家：真的改这份仿真书库，好让预览看到落盘后的样子。
         case 'rename_dir':
         case 'notes_rename_folder': {

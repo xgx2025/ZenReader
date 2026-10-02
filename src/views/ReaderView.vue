@@ -639,6 +639,11 @@ async function loadDocument() {
   }
   await notesStore.load(relPath)
   await nextTick()
+  const linkedNoteId = typeof route.query.note === 'string' ? route.query.note : ''
+  if (linkedNoteId && notesStore.notes.some((note) => note.id === linkedNoteId)) {
+    showNotes.value = true
+    activeNoteId.value = linkedNoteId
+  }
 
   if (loaded.format === 'html') {
     // HTML 分支：正文在沙箱 iframe 内原样式直读。proseText 用宿主侧静态快照，
@@ -672,6 +677,7 @@ async function loadDocument() {
   }
 
   renderProse()
+  if (linkedNoteId) nextTick(() => jumpToHighlight(linkedNoteId))
   // Same component instance is reused across documents - reset the surface,
   // then restore the saved position (续读) if the content still matches.
   if (containerRef.value) {
@@ -1289,6 +1295,7 @@ watch(() => route.params.path, loadDocument)
             @close="showNotes = false"
             @select="onSelectNote"
             @edit="onEditNote"
+            @connect="router.push({ path: '/knowledge', query: { note: $event } })"
             @delete="onRequestDelete"
             @create="onNewFreeNote"
             @zoom-image="viewerSrc = $event"

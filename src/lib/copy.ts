@@ -10,6 +10,9 @@ export const COPY = {
   tagline: '阅·见本心',
 
   library: '书库',
+  knowledgeMap: '知识全局图',
+  knowledgeMapHint: '查看自己的知识体系',
+  newTopic: '新建主题',
   import: '引卷',
   importFolder: '拾整卷',
   settings: '调适',
