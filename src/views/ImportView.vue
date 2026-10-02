@@ -6,6 +6,7 @@ import ZIcon from '@/components/common/ZIcon.vue'
 
 import { useFileImport } from '@/composables/useFileImport'
 import { useNativeDragDrop } from '@/composables/useNativeDragDrop'
+import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useLibraryStore } from '@/stores/library'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
@@ -14,6 +15,7 @@ import type { ImportResult } from '@/types/import'
 const { items, importing, importFiles, importPaths } = useFileImport()
 const library = useLibraryStore()
 const { notify } = useToast()
+const { openPanel } = useSettingsPanel()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
@@ -102,18 +104,27 @@ const STATUS_CLASS: Record<string, string> = {
 <template>
   <div class="min-h-screen text-ink">
     <header
-      class="header-fade relative flex items-center gap-3 bg-paper/55 px-6 py-4 backdrop-blur-md"
+      class="header-fade relative flex items-center justify-between gap-3 bg-paper/55 px-6 py-4 backdrop-blur-md"
     >
-      <button
-        class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-        @click="$router.push('/')"
-      >
-        <ZIcon name="back" :size="18" />
-      </button>
-      <div>
-        <h1 class="font-serif text-lg">{{ COPY.import }}</h1>
-        <p class="text-xs text-dusk">{{ COPY.importDropHint }}</p>
+      <div class="flex items-center gap-3">
+        <button
+          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+          :title="COPY.scopeBack"
+          :aria-label="COPY.scopeBack"
+          @click="$router.push('/')"
+        >
+          <ZIcon name="back" :size="18" />
+        </button>
+        <div>
+          <h1 class="font-serif text-lg">{{ COPY.import }}</h1>
+          <p class="text-xs text-dusk">{{ COPY.importDropHint }}</p>
+        </div>
       </div>
+      <button
+        class="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        :title="COPY.settings"
+        @click="openPanel('library')"
+      ><ZIcon name="settings" :size="17" />{{ COPY.settings }}</button>
     </header>
 
     <main class="mx-auto max-w-2xl p-6">

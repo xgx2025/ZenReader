@@ -137,7 +137,7 @@ const isNewBadge = computed(
     <component
       :is="surface"
       :to="linkTo"
-      class="flex min-w-0 flex-1 flex-col rounded-2xl bg-paper-deep/40 p-5 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
+      class="flex min-w-0 flex-1 flex-col rounded-2xl bg-paper-deep/40 p-4 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
       :role="arranging ? 'button' : undefined"
       :tabindex="pickable ? 0 : undefined"
       :aria-label="pickable ? title : undefined"

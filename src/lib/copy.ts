@@ -1,6 +1,6 @@
 /**
  * Poetic microcopy — centralized so the "禅" voice stays consistent.
- * (设置→调适, 收藏/书签→驻足, 删除→释怀, 导入→引卷, 文件夹导入→拾整卷,
+ * (收藏/书签→驻足, 删除→释怀, 导入→引卷, 文件夹导入→拾整卷,
  *  笔记→觉悟, 禅模式→禅境, 搜索→寻)
  */
 export const COPY = {
@@ -15,14 +15,14 @@ export const COPY = {
   newTopic: '新建主题',
   import: '引卷',
   importFolder: '拾整卷',
-  settings: '调适',
+  settings: '设置',
   bookmark: '驻足',
   delete: '释怀',
   note: '觉悟',
   zenMode: '禅境',
   fullscreen: '全屏',
   exitFullscreen: '退出全屏',
-  search: '寻…',
+  search: '搜索书名与正文',
   toc: '目录',
   notes: '觉悟笔记',
 
@@ -100,7 +100,7 @@ export const COPY = {
   noReleaseYet: '尚未发布',
   updateCheckFailed: '探问不得，网络有恙',
 
-  // 设置面板（调适）
+  // 设置面板
   theme: '主题',
   themeLight: '明亮',
   themeSepia: '暮色',

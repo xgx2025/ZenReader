@@ -9,7 +9,7 @@ const props = withDefaults(
     open: boolean
     /** 标准头部（标题 + 关闭钮）；不传则由插槽自绘头部。 */
     title?: string
-    maxWidth?: 'xs' | 'sm' | 'md'
+    maxWidth?: 'xs' | 'sm' | 'md' | 'lg'
     /** 提供后卡片限高：头部与 footer 插槽钉在卡片两缘，默认插槽内容区内部滚动（如 '85vh'）。 */
     maxHeight?: string
     /** 无标题头部的弹窗用它补充可访问名称。 */
@@ -23,10 +23,11 @@ const emit = defineEmits<{ close: [] }>()
 const cardEl = ref<HTMLElement | null>(null)
 let lastFocused: HTMLElement | null = null
 
-const WIDTH: Record<'xs' | 'sm' | 'md', string> = {
+const WIDTH: Record<'xs' | 'sm' | 'md' | 'lg', string> = {
   xs: 'max-w-xs',
   sm: 'max-w-sm',
   md: 'max-w-md',
+  lg: 'max-w-2xl',
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -42,9 +43,9 @@ function onKeydown(e: KeyboardEvent) {
   }
   // 焦点圈禁：Tab 始终留在弹窗之内。
   if (e.key !== 'Tab' || !cardEl.value) return
-  const focusables = cardEl.value.querySelectorAll<HTMLElement>(
+  const focusables = Array.from(cardEl.value.querySelectorAll<HTMLElement>(
     'button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"])',
-  )
+  )).filter((el) => el.getClientRects().length > 0 && !el.hasAttribute('disabled'))
   if (focusables.length === 0) return
   const first = focusables[0]
   const last = focusables[focusables.length - 1]

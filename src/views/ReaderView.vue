@@ -910,12 +910,6 @@ function bumpFont(delta: number) {
   settings.update({ fontSize: next })
 }
 
-function toggleFontFamily() {
-  settings.update({
-    fontFamily: settings.fontFamily === 'serif' ? 'sans' : 'serif',
-  })
-}
-
 function scrollToHeading(id: string) {
   // TOC 侧栏点击共用入口：html 项 id 是合成的 `zhh-{i}`，md 是正文标题 id。
   if (isHtml.value) {
@@ -1102,6 +1096,8 @@ watch(() => route.params.path, loadDocument)
           />
           <button
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="COPY.scopeBack"
+            :aria-label="COPY.scopeBack"
             @click="router.push('/')"
           >
             <ZIcon name="back" :size="18" />
@@ -1148,21 +1144,13 @@ watch(() => route.params.path, loadDocument)
             <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
           </button>
           <button
-            v-if="!isHtml"
-            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :class="{ 'text-bamboo': settings.fontFamily === 'sans' }"
-            :title="COPY.font"
-            @click="toggleFontFamily"
+            class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="`${COPY.reading}${COPY.settings}`"
+            :aria-label="`${COPY.reading}${COPY.settings}`"
+            @click="openPanel('reading')"
           >
-            <span class="font-serif text-sm">字</span>
-          </button>
-  
-          <button
-            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :title="COPY.settings"
-            @click="openPanel"
-          >
-            <ZIcon name="settings" :size="18" />
+            <ZIcon name="settings" :size="17" />
+            <span class="text-xs">{{ COPY.typography }}</span>
           </button>
   
           <button

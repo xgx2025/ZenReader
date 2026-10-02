@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
-import type { IconName } from '@/components/common/ZIcon.vue'
+import AppHeader from '@/components/common/AppHeader.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import DocumentCard from '@/components/library/DocumentCard.vue'
@@ -11,7 +11,6 @@ import MoveDialog from '@/components/library/MoveDialog.vue'
 
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
-import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useVaultDrop, type DropImportResult } from '@/composables/useVaultDrop'
 import { useToast } from '@/composables/useToast'
 import { useCardArrange } from '@/composables/useCardArrange'
@@ -30,28 +29,12 @@ import {
   folderParentOf,
 } from '@/lib/folderTree'
 import { folderPathFromRelative, isPathInFolder, rewritePathPrefix } from '@/lib/vault'
-import type { ThemeName } from '@/types/settings'
 import { DEFAULT_SETTINGS, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '@/types/settings'
 import type { FormatFilter, VaultFile } from '@/types/document'
 
 const library = useLibraryStore()
 const settings = useSettingsStore()
-const { openPanel } = useSettingsPanel()
 const { notify } = useToast()
-
-const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
-
-/** 三态主题图标：明亮→日、暮色→落日、夜读→月。 */
-const THEME_ICON: Record<ThemeName, IconName> = {
-  light: 'sun',
-  sepia: 'sunset',
-  dark: 'moon',
-}
-
-function cycleTheme() {
-  const i = THEME_CYCLE.indexOf(settings.theme)
-  settings.setTheme(THEME_CYCLE[(i + 1) % THEME_CYCLE.length])
-}
 
 const SORTS = [
   { key: 'modified', label: '最近修改' },
@@ -782,7 +765,7 @@ const cardsToRender = computed<VaultFile[]>(() =>
 
 const gridClass = computed(() =>
   [
-    'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
+    'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
     // 整片网格淡入：非拖动排序态每次重挂载播放一次（见下方 key）。
     arranging.value ? 'arrange-active' : 'grid-arrive',
   ].join(' '),
@@ -973,26 +956,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-screen flex-col overflow-hidden text-ink">
-    <header
-      class="header-fade sticky top-0 z-10 flex items-center justify-between bg-paper/55 px-6 py-4 backdrop-blur-md"
-    >
-      <div class="flex items-baseline gap-2.5">
-        <h1 class="font-serif text-xl leading-tight">{{ COPY.appName }}</h1>
-        <span class="text-[11px] uppercase tracking-[0.18em] text-dusk">
-          {{ COPY.appNameLatin }}
-        </span>
-      </div>
-
-      <div class="flex items-center gap-1.5">
-        <RouterLink
-          v-if="library.hasVault"
-          to="/knowledge"
-          class="mr-2 inline-flex items-center gap-2 rounded-full border border-bamboo/25 bg-bamboo/8 px-4 py-1.5 text-sm text-bamboo transition-colors hover:bg-bamboo/15"
-          :title="COPY.knowledgeMapHint"
-        >
-          <ZIcon name="connections" :size="16" />
-          {{ COPY.knowledgeMap }}
-        </RouterLink>
+    <AppHeader active="library">
+      <template #actions>
         <button
           v-if="library.hasVault"
           class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft"
@@ -1002,32 +967,15 @@ onBeforeUnmount(() => {
         >
           <ZIcon name="refresh" :size="17" />
         </button>
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.theme"
-          @click="cycleTheme"
-        >
-          <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
-        </button>
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.settings"
-          @click="openPanel"
-        >
-          <ZIcon name="settings" :size="18" />
-        </button>
-
         <RouterLink
           to="/import"
-          class="flex items-center gap-2 rounded-full bg-bamboo px-4 py-1.5 text-sm text-paper transition-opacity hover:opacity-90"
+          class="inline-flex items-center gap-2 rounded-full bg-bamboo px-4 py-1.5 text-sm text-paper transition-opacity hover:opacity-90"
         >
           <ZIcon name="import" :size="16" />
           {{ COPY.import }}
         </RouterLink>
-      </div>
-    </header>
+      </template>
+    </AppHeader>
 
     <!-- 未打开书库 -->
     <div
@@ -1247,6 +1195,7 @@ onBeforeUnmount(() => {
               v-model="library.search"
               :readonly="arranging"
               :placeholder="COPY.search"
+              :aria-label="COPY.search"
               class="w-full rounded-full bg-paper-deep/60 py-2 pl-9 pr-9 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
               @focus="searchFocused = true"
               @blur="searchFocused = false"

@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppHeader from '@/components/common/AppHeader.vue'
 import ZIcon from '@/components/common/ZIcon.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useSettingsStore } from '@/stores/settings'
@@ -229,22 +230,7 @@ function openNote(path: string, noteId: string) {
 
 <template>
   <div class="knowledge-page flex h-screen flex-col overflow-hidden text-ink">
-    <header class="header-fade relative z-10 flex shrink-0 items-center justify-between bg-paper/70 px-6 py-4 backdrop-blur-md">
-      <div class="flex items-baseline gap-2.5">
-        <h1 class="font-serif text-xl leading-tight">禅阅读</h1>
-        <span class="text-[11px] uppercase tracking-[0.18em] text-dusk">ZENREADER</span>
-      </div>
-      <nav aria-label="主要页面" class="flex items-center gap-1 rounded-full bg-paper-deep/55 p-1 text-sm">
-        <RouterLink to="/" class="rounded-full px-4 py-1.5 text-ink-soft transition-colors hover:text-ink">书库</RouterLink>
-        <span class="rounded-full bg-bamboo px-4 py-1.5 text-paper">{{ COPY.knowledgeMap }}</span>
-      </nav>
-      <div class="flex items-center gap-3">
-        <span class="hidden text-xs tracking-[0.13em] text-dusk lg:block">所学相连 · 所思成形</span>
-        <button class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft hover:bg-bamboo/10" title="调适" @click="settings.setTheme(settings.theme === 'light' ? 'sepia' : settings.theme === 'sepia' ? 'dark' : 'light')">
-          <ZIcon :name="settings.theme === 'light' ? 'sun' : settings.theme === 'sepia' ? 'sunset' : 'moon'" :size="17" />
-        </button>
-      </div>
-    </header>
+    <AppHeader active="knowledge" />
 
     <div v-if="!settings.vaultPath" class="flex flex-1 flex-col items-center justify-center gap-4 text-center">
       <p class="font-serif text-2xl">先打开一座书库</p>
