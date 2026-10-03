@@ -893,7 +893,8 @@ body.folder-drag-active .folder-line * {
 .sidebar-resize {
   position: absolute;
   top: 0;
-  right: -3px;
+  /* 命中区留在滚动容器内；越出右缘会撑出 3px 横向滚动条。 */
+  right: 0;
   z-index: 3;
   width: 6px;
   height: 100%;
