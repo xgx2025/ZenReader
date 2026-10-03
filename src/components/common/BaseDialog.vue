@@ -10,12 +10,14 @@ const props = withDefaults(
     /** 标准头部（标题 + 关闭钮）；不传则由插槽自绘头部。 */
     title?: string
     maxWidth?: 'xs' | 'sm' | 'md' | 'lg'
+    /** 固定卡片高度；与 maxHeight 合用时，小视口会自动夹到限高。 */
+    height?: string
     /** 提供后卡片限高：头部与 footer 插槽钉在卡片两缘，默认插槽内容区内部滚动（如 '85vh'）。 */
     maxHeight?: string
     /** 无标题头部的弹窗用它补充可访问名称。 */
     ariaLabel?: string
   }>(),
-  { title: '', maxWidth: 'md', maxHeight: '', ariaLabel: '' },
+  { title: '', maxWidth: 'md', height: '', maxHeight: '', ariaLabel: '' },
 )
 
 const emit = defineEmits<{ close: [] }>()
@@ -94,7 +96,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
           tabindex="-1"
           class="w-full rounded-2xl border border-line bg-paper shadow-zen-lg outline-none"
           :class="[WIDTH[maxWidth], maxHeight ? 'flex max-h-full flex-col overflow-hidden' : '']"
-          :style="maxHeight ? { maxHeight } : undefined"
+          :style="{ height: height || undefined, maxHeight: maxHeight || undefined }"
         >
           <header
             v-if="title"

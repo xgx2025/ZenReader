@@ -216,7 +216,8 @@ onBeforeUnmount(closePreview)
     :open="open"
     :title="COPY.settings"
     max-width="lg"
-    max-height="82vh"
+    height="560px"
+    max-height="calc(100dvh - 2rem)"
     @close="emit('close')"
   >
     <div ref="layoutEl" class="flex min-h-[430px]">
