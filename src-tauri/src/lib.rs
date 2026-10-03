@@ -6,6 +6,7 @@ use std::time::UNIX_EPOCH;
 use tauri::Manager;
 
 mod asset_protocol;
+mod knowledge;
 mod notes;
 
 /// 当前活跃书库根（绝对路径）。由前端在开库/refresh 及 reader.open(html) 时
@@ -550,12 +551,15 @@ pub fn run() {
             read_settings,
             write_settings,
             notes::notes_list,
+            notes::notes_list_all,
             notes::notes_add,
             notes::notes_update,
             notes::notes_delete,
             notes::notes_move_document,
             notes::notes_delete_document,
-            notes::notes_rename_folder
+            notes::notes_rename_folder,
+            knowledge::knowledge_load,
+            knowledge::knowledge_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZenReader");

@@ -1,0 +1,11 @@
+{
+  "productName": "ZenReaderGuideProbe",
+  "identifier": "com.zenreader.guideprobe",
+  "app": {
+    "windows": [
+      {
+        "title": "ZenReader Guide Probe"
+      }
+    ]
+  }
+}

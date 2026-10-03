@@ -12,6 +12,7 @@
  *   --script=<js>      截图前在页面里执行的表达式（可 import 同目录的 js）
  *   --after=           --script 之后再等多久（默认 700）
  *   --hover=<选择器>   截图前把真实指针移到该元素中心（`:hover` 只有真指针认）
+ *   --click=<选择器>   脚本后以 CDP 真实鼠标点击目标（表单按钮可验完整手势）
  *   --clip=x,y,w,h     只截这块区域
  *   --fullpage=1       截整页
  *
@@ -180,6 +181,20 @@ try {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y })
       await sleep(Number(opt.after ?? 700))
     }
+  }
+
+  if (opt.click) {
+    const r = await send('Runtime.evaluate', {
+      expression: `(() => { const el = document.querySelector(${JSON.stringify(opt.click)}); if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`,
+      returnByValue: true,
+    })
+    const at = r.result?.value
+    if (!at) throw new Error(`click target missing: ${opt.click}`)
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y })
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+    await sleep(Number(opt.after ?? 700))
+    console.log('[click]', opt.click)
   }
 
   const shot = { format: 'png' }

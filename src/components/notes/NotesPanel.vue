@@ -12,6 +12,7 @@ const emit = defineEmits<{
   delete: [id: string]
   select: [id: string]
   edit: [id: string]
+  connect: [id: string]
   create: []
   zoomImage: [src: string]
   zoomFigure: [svg: { html: string; ratio: number }]
@@ -107,6 +108,13 @@ watch(
           @zoom-figure="emit('zoomFigure', $event)"
         />
         <div class="mt-2 flex items-center gap-3">
+          <button
+            class="inline-flex items-center gap-1 text-xs text-dusk transition-colors hover:text-bamboo"
+            @click.stop="emit('connect', n.id)"
+          >
+            <ZIcon name="connections" :size="13" />
+            归入知识图
+          </button>
           <button
             class="inline-flex items-center gap-1 text-xs text-dusk transition-colors hover:text-bamboo"
             @click.stop="emit('edit', n.id)"

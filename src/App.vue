@@ -5,6 +5,7 @@ import { RouterView } from 'vue-router'
 import SettingsPanel from '@/components/settings/SettingsPanel.vue'
 import PaperTexture from '@/components/common/PaperTexture.vue'
 import ToastHost from '@/components/common/ToastHost.vue'
+import GuideHost from '@/components/common/GuideHost.vue'
 import ReminderToast from '@/components/reader/ReminderToast.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
@@ -14,7 +15,7 @@ import { useUpdateCheck } from '@/composables/useUpdateCheck'
 import { isTauri } from '@/lib/native'
 
 const settings = useSettingsStore()
-const { open, closePanel } = useSettingsPanel()
+const { open, section, closePanel } = useSettingsPanel()
 const { toggle: toggleFullscreen, wire: wireFullscreen } = useFullscreen()
 // 全局专注钟：应用启动即走表——香不属于任何页面，退出应用方熄。
 const { start: startZenClock } = useZenClock()
@@ -51,10 +52,11 @@ onBeforeUnmount(() => {
 
   <PaperTexture />
 
-  <SettingsPanel :open="open" @close="closePanel" />
+  <SettingsPanel :open="open" :section="section" @close="closePanel" />
 
   <!-- 香尽提醒：全局挂载，人在书库/别的页面也接得住 -->
   <ReminderToast />
 
   <ToastHost />
+  <GuideHost />
 </template>

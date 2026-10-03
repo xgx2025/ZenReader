@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * 调适面板 —— 两页签（阅读 / 禅境）+ 底部固定书库行。
- * 阅读页收排版类设置，禅境页收入定与禅钟；页签只是视图分组，
+ * 设置面板 —— 按用途分为外观、阅读、书库、禅境、禅钟与关于。
+ * 分类只是视图分组，
  * 各控件直接读写 settings store，无独立状态。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -18,6 +18,7 @@ import { nativeFs, isTauri } from '@/lib/native'
 import { getAppVersion } from '@/lib/update'
 import { useUpdateCheck } from '@/composables/useUpdateCheck'
 import { COPY } from '@/lib/copy'
+import type { SettingsSection } from '@/composables/useSettingsPanel'
 import type {
   ReaderFont,
   ThemeName,
@@ -28,7 +29,7 @@ import type {
 } from '@/types/settings'
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '@/types/settings'
 
-defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean; section: SettingsSection }>()
 const emit = defineEmits<{ close: [] }>()
 
 const settings = useSettingsStore()
@@ -43,13 +44,38 @@ onMounted(() => {
   })
 })
 
-/** 面板页签：阅读排版 / 禅境（入定 + 禅钟）。 */
-type SettingsTab = 'reading' | 'zen'
-const tab = ref<SettingsTab>('reading')
-const TABS: { key: SettingsTab; label: string }[] = [
-  { key: 'reading', label: COPY.reading },
-  { key: 'zen', label: COPY.zenMode },
+const tab = ref<SettingsSection>('appearance')
+const TABS: { key: SettingsSection; label: string; hint: string }[] = [
+  { key: 'appearance', label: COPY.appearance, hint: '主题与纸张' },
+  { key: 'reading', label: COPY.reading, hint: '字体与排版' },
+  { key: 'library', label: COPY.library, hint: '目录与侧栏' },
+  { key: 'zen', label: COPY.zenMode, hint: '入定方式' },
+  { key: 'clock', label: COPY.zenClock, hint: '歇息提醒' },
+  { key: 'about', label: COPY.about, hint: '版本与更新' },
 ]
+const layoutEl = ref<HTMLElement | null>(null)
+watch(() => [props.open, props.section] as const, async ([open, section]) => {
+  if (!open) return
+  tab.value = section
+  await nextTick()
+  layoutEl.value?.parentElement?.scrollTo({ top: 0 })
+}, { immediate: true })
+
+watch(tab, async () => {
+  await nextTick()
+  layoutEl.value?.parentElement?.scrollTo({ top: 0 })
+})
+
+function onCategoryKeydown(e: KeyboardEvent) {
+  const direction = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
+  if (!direction && e.key !== 'Home' && e.key !== 'End') return
+  e.preventDefault()
+  const current = TABS.findIndex((item) => item.key === tab.value)
+  const next = e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : (current + direction + TABS.length) % TABS.length
+  tab.value = TABS[next].key
+  const buttons = (e.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+  buttons?.[next]?.focus()
+}
 
 const THEMES: { key: ThemeName; label: string }[] = [
   { key: 'light', label: COPY.themeLight },
@@ -189,34 +215,34 @@ onBeforeUnmount(closePreview)
   <BaseDialog
     :open="open"
     :title="COPY.settings"
-    max-width="md"
-    max-height="85vh"
+    max-width="lg"
+    max-height="82vh"
     @close="emit('close')"
   >
-    <!-- 页签：阅读 / 禅境（钉在滚动区顶） -->
-    <div class="sticky top-0 z-10 bg-paper px-5 pb-3 pt-4">
-      <div class="flex rounded-full border border-line p-0.5" role="tablist" :aria-label="COPY.settings">
+    <div ref="layoutEl" class="flex min-h-[430px]">
+      <nav class="sticky top-0 h-fit w-44 shrink-0 border-r border-line px-3 py-5" role="tablist" aria-orientation="vertical" :aria-label="COPY.settings">
         <button
           v-for="t in TABS"
           :key="t.key"
           type="button"
           role="tab"
-          class="flex-1 rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors"
-          :class="{ 'bg-bamboo/15 text-ink': tab === t.key }"
+          class="mb-1 block w-full rounded-xl px-3 py-2.5 text-left transition-colors"
+          :class="tab === t.key ? 'bg-bamboo/12 text-ink' : 'text-ink-soft hover:bg-paper-deep/50 hover:text-ink'"
           :aria-selected="tab === t.key"
+          :aria-controls="`settings-${t.key}`"
+          @keydown="onCategoryKeydown"
           @click="tab = t.key"
         >
-          {{ t.label }}
+          <span class="block text-sm font-medium">{{ t.label }}</span>
+          <span class="mt-0.5 block text-[11px] text-ink-soft">{{ t.hint }}</span>
         </button>
-      </div>
-    </div>
+      </nav>
+      <div class="min-w-0 flex-1 px-6 py-5">
 
-    <!-- 阅读：外观 → 排版 → 段落 -->
-    <div v-show="tab === 'reading'" role="tabpanel" :aria-label="COPY.reading" class="px-5 pb-5">
-      <h3 class="flex items-center gap-1.5 text-sm font-medium text-ink-soft">
-        {{ COPY.appearance }}
-      </h3>
-      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
+    <section id="settings-appearance" v-show="tab === 'appearance'" role="tabpanel" :aria-label="COPY.appearance">
+      <h2 class="font-serif text-xl text-ink">{{ COPY.appearance }}</h2>
+      <p class="mt-1 text-xs text-ink-soft">调整整个应用的纸色与纹理。</p>
+      <div class="mt-6 rounded-xl bg-paper-deep/40 px-4 py-3">
         <span class="block text-xs text-ink-soft">{{ COPY.theme }}</span>
         <div class="mt-2 flex rounded-full border border-line p-0.5">
           <button
@@ -242,8 +268,15 @@ onBeforeUnmount(closePreview)
             {{ p.label }}
           </button>
         </div>
+      </div>
+    </section>
 
-        <span class="mt-3 block text-xs text-ink-soft">{{ COPY.font }}</span>
+    <section id="settings-reading" v-show="tab === 'reading'" role="tabpanel" :aria-label="COPY.reading">
+      <h2 class="font-serif text-xl text-ink">{{ COPY.reading }}</h2>
+      <p class="mt-1 text-xs text-ink-soft">让正文的字形与节奏更合眼。</p>
+      <div class="mt-6 rounded-xl bg-paper-deep/40 px-4 py-3">
+
+        <span class="block text-xs text-ink-soft">{{ COPY.font }}</span>
         <div class="mt-2 flex rounded-full border border-line p-0.5">
           <button
             v-for="f in FONTS"
@@ -317,11 +350,12 @@ onBeforeUnmount(closePreview)
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 禅境：入定 → 禅钟 -->
-    <div v-show="tab === 'zen'" role="tabpanel" :aria-label="COPY.zenMode" class="px-5 pb-5">
-      <h3 class="flex items-center gap-1.5 text-sm font-medium text-ink-soft">
+    <section id="settings-zen" v-show="tab === 'zen'" role="tabpanel" :aria-label="COPY.zenMode">
+      <h2 class="font-serif text-xl text-ink">{{ COPY.zenMode }}</h2>
+      <p class="mt-1 text-xs text-ink-soft">选择入定的过场与全屏方式。</p>
+      <h3 class="mt-6 flex items-center gap-1.5 text-sm font-medium text-ink-soft">
         {{ COPY.entryGroup }}
       </h3>
       <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
@@ -385,10 +419,12 @@ onBeforeUnmount(closePreview)
         </div>
       </div>
 
-      <h3 class="mt-5 flex items-center gap-1.5 text-sm font-medium text-ink-soft">
-        {{ COPY.zenClock }}
-      </h3>
-      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-3">
+    </section>
+
+    <section id="settings-clock" v-show="tab === 'clock'" role="tabpanel" :aria-label="COPY.zenClock">
+      <h2 class="font-serif text-xl text-ink">{{ COPY.zenClock }}</h2>
+      <p class="mt-1 text-xs text-ink-soft">设定一炷香的长度与歇息提醒。</p>
+      <div class="mt-6 rounded-xl bg-paper-deep/40 px-4 py-3">
         <div class="flex items-center justify-between">
           <span class="text-xs text-ink-soft">{{ COPY.reminderEnable }}</span>
           <button
@@ -528,6 +564,66 @@ onBeforeUnmount(closePreview)
           </button>
         </div>
       </div>
+    </section>
+
+    <section id="settings-library" v-show="tab === 'library'" role="tabpanel" :aria-label="COPY.library">
+      <h2 class="font-serif text-xl text-ink">{{ COPY.library }}</h2>
+      <p class="mt-1 text-xs text-ink-soft">管理书库所在目录与左侧分组栏。</p>
+      <h3 class="mt-6 text-sm font-medium text-ink-soft">{{ COPY.vaultFolder }}</h3>
+      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-4">
+        <p class="break-all text-sm text-ink" :title="settings.vaultPath || undefined">
+          {{ settings.vaultPath || COPY.noFolder }}
+        </p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            v-if="inTauri"
+            class="rounded-full border border-line px-3 py-1.5 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink"
+            @click="pickVaultFolder"
+          >{{ COPY.chooseFolder }}</button>
+          <span v-else class="text-xs text-ink-soft">{{ COPY.desktopOnly }}</span>
+          <button
+            v-if="settings.vaultPath"
+            class="rounded-full px-3 py-1.5 text-xs text-ink-soft transition-colors hover:bg-sandal/10 hover:text-sandal"
+            @click="settings.setVaultPath('')"
+          >{{ COPY.clearFolder }}</button>
+        </div>
+      </div>
+
+      <h3 class="mt-6 text-sm font-medium text-ink-soft">{{ COPY.sidebarWidth }}</h3>
+      <div class="mt-2 rounded-xl bg-paper-deep/40 px-4 py-4" :class="settings.vaultPath ? '' : 'opacity-40'">
+        <div class="flex items-center gap-3">
+          <input
+            type="range"
+            class="min-w-0 flex-1 accent-bamboo"
+            :aria-label="COPY.sidebarWidth"
+            :min="SIDEBAR_MIN"
+            :max="SIDEBAR_MAX"
+            step="4"
+            :value="settings.sidebarWidth"
+            :disabled="!settings.vaultPath"
+            @input="onSidebarWidth"
+          />
+          <span class="w-10 text-right text-sm tabular-nums text-ink-soft">{{ settings.sidebarWidth }}</span>
+        </div>
+        <p class="mt-2 text-xs text-ink-soft">也可以拖动书库侧栏的右缘，双击复位。</p>
+      </div>
+    </section>
+
+    <section id="settings-about" v-show="tab === 'about'" role="tabpanel" :aria-label="COPY.about">
+      <h2 class="font-serif text-xl text-ink">{{ COPY.about }}</h2>
+      <p class="mt-1 text-xs text-ink-soft">ZenReader · 禅阅读</p>
+      <div class="mt-6 flex items-center justify-between gap-3 rounded-xl bg-paper-deep/40 px-4 py-4">
+        <span class="text-sm text-ink">{{ currentVersion ? `v${currentVersion}` : '当前版本' }}</span>
+        <button
+          v-if="inTauri"
+          class="rounded-full border border-line px-3 py-1.5 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink disabled:cursor-wait disabled:opacity-50"
+          :disabled="checking"
+          @click="checkUpdate(true)"
+        >{{ checking ? COPY.checkingUpdate : COPY.checkUpdate }}</button>
+        <span v-else class="text-xs text-ink-soft">{{ COPY.desktopOnly }}</span>
+      </div>
+    </section>
+      </div>
     </div>
 
     <!-- 试播：全屏预演所选入定动画，轻触任意处即止 -->
@@ -555,75 +651,5 @@ onBeforeUnmount(closePreview)
       </Transition>
     </Teleport>
 
-    <!-- 底部固定：书库目录（低频，标签+内容两行） + 关于（版本与更新检查） -->
-    <template #footer>
-      <div class="border-t border-line px-5 py-3">
-        <div class="flex items-center gap-1.5">
-          <ZIcon name="folder" :size="14" class="shrink-0 text-sandal" />
-          <span class="text-xs font-medium text-ink-soft">{{ COPY.vaultFolder }}</span>
-        </div>
-        <div class="mt-2 flex items-center gap-2">
-          <span
-            class="min-w-0 flex-1 truncate text-sm"
-            :class="settings.vaultPath ? 'text-ink' : 'text-dusk'"
-            :title="settings.vaultPath || undefined"
-          >
-            {{ settings.vaultPath || COPY.noFolder }}
-          </span>
-          <button
-            v-if="inTauri"
-            class="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink"
-            @click="pickVaultFolder"
-          >
-            {{ COPY.chooseFolder }}
-          </button>
-          <span v-else class="shrink-0 text-xs text-dusk">{{ COPY.desktopOnly }}</span>
-          <button
-            v-if="settings.vaultPath"
-            class="shrink-0 rounded-full px-3 py-1 text-xs text-dusk transition-colors hover:text-sandal"
-            @click="settings.setVaultPath('')"
-          >
-            {{ COPY.clearFolder }}
-          </button>
-        </div>
-
-        <!-- 侧栏宽度：除了右缘那根可拖的手柄，这里再给一处说得出口的入口——
-             手柄是「知道才用得上」的，设置项是「找得到」的。 -->
-        <div class="mt-3 flex items-center gap-2" :class="settings.vaultPath ? '' : 'opacity-40'">
-          <span class="shrink-0 text-xs text-ink-soft">{{ COPY.sidebarWidth }}</span>
-          <input
-            type="range"
-            class="min-w-0 flex-1 accent-bamboo"
-            :min="SIDEBAR_MIN"
-            :max="SIDEBAR_MAX"
-            step="4"
-            :value="settings.sidebarWidth"
-            :disabled="!settings.vaultPath"
-            @input="onSidebarWidth"
-          />
-          <span class="w-10 shrink-0 text-right text-xs tabular-nums text-dusk">
-            {{ settings.sidebarWidth }}
-          </span>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-2 border-t border-line px-5 py-3">
-        <ZIcon name="about" :size="15" class="shrink-0 text-sandal" />
-        <span class="min-w-0 flex-1 truncate text-sm text-ink">
-          {{ COPY.about }}<template v-if="currentVersion">
-            · v{{ currentVersion }}</template
-          >
-        </span>
-        <button
-          v-if="inTauri"
-          class="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink-soft transition-colors hover:border-bamboo hover:text-ink disabled:cursor-wait disabled:opacity-50"
-          :disabled="checking"
-          @click="checkUpdate(true)"
-        >
-          {{ checking ? COPY.checkingUpdate : COPY.checkUpdate }}
-        </button>
-        <span v-else class="shrink-0 text-xs text-dusk">{{ COPY.desktopOnly }}</span>
-      </div>
-    </template>
   </BaseDialog>
 </template>

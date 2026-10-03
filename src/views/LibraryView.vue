@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
-import type { IconName } from '@/components/common/ZIcon.vue'
+import AppHeader from '@/components/common/AppHeader.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import DocumentCard from '@/components/library/DocumentCard.vue'
@@ -11,7 +11,6 @@ import MoveDialog from '@/components/library/MoveDialog.vue'
 
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
-import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useVaultDrop, type DropImportResult } from '@/composables/useVaultDrop'
 import { useToast } from '@/composables/useToast'
 import { useCardArrange } from '@/composables/useCardArrange'
@@ -30,27 +29,19 @@ import {
   folderParentOf,
 } from '@/lib/folderTree'
 import { folderPathFromRelative, isPathInFolder, rewritePathPrefix } from '@/lib/vault'
-import type { ThemeName } from '@/types/settings'
 import { DEFAULT_SETTINGS, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '@/types/settings'
+import { useGuide } from '@/composables/useGuide'
 import type { FormatFilter, VaultFile } from '@/types/document'
 
 const library = useLibraryStore()
 const settings = useSettingsStore()
-const { openPanel } = useSettingsPanel()
 const { notify } = useToast()
+const { active: activeGuide, guideEvent, suggestGuide, finishGuide } = useGuide()
 
-const THEME_CYCLE: ThemeName[] = ['light', 'sepia', 'dark']
-
-/** 三态主题图标：明亮→日、暮色→落日、夜读→月。 */
-const THEME_ICON: Record<ThemeName, IconName> = {
-  light: 'sun',
-  sepia: 'sunset',
-  dark: 'moon',
-}
-
-function cycleTheme() {
-  const i = THEME_CYCLE.indexOf(settings.theme)
-  settings.setTheme(THEME_CYCLE[(i + 1) % THEME_CYCLE.length])
+async function onOpenVault() {
+  if (!await library.openVault()) return
+  guideEvent('vault-opened')
+  if (library.files.length === 0) suggestGuide('import')
 }
 
 const SORTS = [
@@ -146,6 +137,7 @@ function selectFolder(path: string) {
 
 function onFolderSelect(path: string) {
   selectFolder(path)
+  suggestGuide('folder-scope')
   // 焦点跟着意图走：再按方向键时从刚点过的那一行继续，而非从旧位置。
   focusedFolder.value = path
   nextTick(() => focusRow(path))
@@ -270,6 +262,7 @@ const removeTarget = ref<VaultFile | null>(null)
 
 function openMenu(file: VaultFile, x: number, y: number) {
   menu.value = { open: true, x, y, file }
+  suggestGuide('folder-move')
 }
 
 function closeMenu() {
@@ -626,12 +619,14 @@ const newFolderParentLabel = computed(() => {
 
 function startCreating() {
   creating.value = true
+  suggestGuide('folder-create')
   newFolderName.value = ''
   newFolderError.value = ''
   nextTick(() => newFolderInput.value?.focus())
 }
 
 function cancelCreating() {
+  if (activeGuide.value === 'folder-create') finishGuide(true)
   creating.value = false
   newFolderName.value = ''
   newFolderError.value = ''
@@ -669,8 +664,10 @@ async function submitFolder() {
   try {
     await library.createFolder(newFolderName.value.trim())
     notify(COPY.folderCreated)
+    guideEvent('folder-created')
   } catch {
     notify(COPY.opFailed, 'sandal')
+    return
   }
   cancelCreating()
 }
@@ -756,6 +753,11 @@ const dropTargetLabel = computed(() => {
 
 // —— 拖动排序（手动排布）：就地拖拽 ——
 const arranging = ref(false)
+/** 视图偏好独立于排序与筛选，重开应用仍沿用上次选项。 */
+const cardView = ref<'grid' | 'list'>(
+  window.localStorage.getItem('zenreader:library-view') === 'list' ? 'list' : 'grid',
+)
+watch(cardView, (view) => window.localStorage.setItem('zenreader:library-view', view))
 /** 拖动排序工作序列：当前可见集按自定义序基线投影；拖拽就地重排它。 */
 const arrangePaths = ref<string[]>([])
 const mainRef = ref<HTMLElement | null>(null)
@@ -782,7 +784,9 @@ const cardsToRender = computed<VaultFile[]>(() =>
 
 const gridClass = computed(() =>
   [
-    'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
+    cardView.value === 'list' && !arranging.value
+      ? 'grid grid-cols-1 gap-2 arrange-grid'
+      : 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
     // 整片网格淡入：非拖动排序态每次重挂载播放一次（见下方 key）。
     arranging.value ? 'arrange-active' : 'grid-arrive',
   ].join(' '),
@@ -957,10 +961,11 @@ function resetSidebarWidth() {
   settings.update({ sidebarWidth: DEFAULT_SETTINGS.sidebarWidth })
 }
 
-onMounted(() => {
-  library.refresh()
+onMounted(async () => {
   window.addEventListener('focus', onWindowFocus)
   window.addEventListener('keydown', onGlobalKey)
+  const ready = await library.refresh()
+  if (ready && library.files.length === 0) suggestGuide('import')
 })
 
 onBeforeUnmount(() => {
@@ -973,17 +978,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-screen flex-col overflow-hidden text-ink">
-    <header
-      class="header-fade sticky top-0 z-10 flex items-center justify-between bg-paper/55 px-6 py-4 backdrop-blur-md"
-    >
-      <div class="flex items-baseline gap-2.5">
-        <h1 class="font-serif text-xl leading-tight">{{ COPY.appName }}</h1>
-        <span class="text-[11px] uppercase tracking-[0.18em] text-dusk">
-          {{ COPY.appNameLatin }}
-        </span>
-      </div>
-
-      <div class="flex items-center gap-1.5">
+    <AppHeader active="library">
+      <template #actions>
         <button
           v-if="library.hasVault"
           class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft"
@@ -993,32 +989,16 @@ onBeforeUnmount(() => {
         >
           <ZIcon name="refresh" :size="17" />
         </button>
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.theme"
-          @click="cycleTheme"
-        >
-          <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
-        </button>
-
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-          :title="COPY.settings"
-          @click="openPanel"
-        >
-          <ZIcon name="settings" :size="18" />
-        </button>
-
         <RouterLink
           to="/import"
-          class="flex items-center gap-2 rounded-full bg-bamboo px-4 py-1.5 text-sm text-paper transition-opacity hover:opacity-90"
+          data-guide="import-link"
+          class="inline-flex items-center gap-2 rounded-full bg-bamboo px-4 py-1.5 text-sm text-paper transition-opacity hover:opacity-90"
         >
           <ZIcon name="import" :size="16" />
           {{ COPY.import }}
         </RouterLink>
-      </div>
-    </header>
+      </template>
+    </AppHeader>
 
     <!-- 未打开书库 -->
     <div
@@ -1030,7 +1010,8 @@ onBeforeUnmount(() => {
       <p class="mt-2 text-sm tracking-wide text-dusk">{{ COPY.tagline }}</p>
       <button
         class="mt-8 inline-flex items-center gap-2 rounded-full bg-bamboo px-6 py-2.5 text-sm text-paper transition-opacity hover:opacity-90"
-        @click="library.openVault()"
+        data-guide="open-vault"
+        @click="onOpenVault"
       >
         <ZIcon name="folder" :size="16" />
         {{ COPY.openVault }}
@@ -1101,7 +1082,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
 
-          <div v-if="creating" class="side-form">
+          <div v-if="creating" data-guide="folder-create" class="side-form">
             <!-- 落点由当前选中分组暗定；不说出来就一定会有人建错层 -->
             <p class="text-[11px] leading-snug text-ink-soft/85">
               {{ COPY.newFolderUnder }}
@@ -1221,13 +1202,11 @@ onBeforeUnmount(() => {
         ></div>
       </aside>
 
-      <main ref="mainRef" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
-        <div
-          class="flex flex-wrap items-center gap-3"
-          :class="crumbs.length ? 'mb-3' : 'mb-6'"
-        >
+      <main ref="mainRef" data-guide="library-main" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
+        <div class="space-y-3" :class="crumbs.length ? 'mb-3' : 'mb-5'">
+          <div class="flex flex-wrap items-center gap-3">
           <div
-            class="relative min-w-0 max-w-md flex-1 transition-opacity duration-300"
+            class="relative min-w-[240px] max-w-xl flex-1 transition-opacity duration-300"
             :class="arranging ? 'pointer-events-none opacity-50' : ''"
           >
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dusk">
@@ -1238,6 +1217,7 @@ onBeforeUnmount(() => {
               v-model="library.search"
               :readonly="arranging"
               :placeholder="COPY.search"
+              :aria-label="COPY.search"
               class="w-full rounded-full bg-paper-deep/60 py-2 pl-9 pr-9 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
               @focus="searchFocused = true"
               @blur="searchFocused = false"
@@ -1297,26 +1277,55 @@ onBeforeUnmount(() => {
             </span>
             <ZIcon name="chevron-down" :size="12" />
           </button>
+          </div>
 
-          <!-- 拖动排序入口 / 完成 -->
-          <button
-            class="flex items-center gap-1.5 rounded-full transition-all duration-300"
-            :class="
-              arranging
-                ? 'bg-bamboo px-4 py-1.5 text-xs text-paper hover:opacity-90'
-                : 'bg-paper-deep/60 px-3.5 py-1.5 text-xs text-ink-soft hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft'
-            "
-            :title="arranging ? undefined : COPY.arrangeNeedTwo"
-            :disabled="!arranging && !arrangeReady"
-            @click="arranging ? finishArrange() : startArrange()"
-          >
-            <ZIcon
-              name="grip"
-              :size="14"
-              :stroke-width="arranging ? 1.4 : 1.25"
-            />
-            {{ arranging ? COPY.arrangeFinish : COPY.arrange }}
-          </button>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs tabular-nums text-dusk">{{ library.filtered.length }} 篇在此</span>
+            <div class="flex items-center gap-2">
+              <div
+                v-if="!arranging"
+                class="flex rounded-full border border-line bg-paper-deep/35 p-0.5"
+                role="group"
+                aria-label="书库视图"
+              >
+                <button
+                  type="button"
+                  data-card-view="grid"
+                  class="rounded-full px-3 py-1 text-xs transition-colors"
+                  :class="cardView === 'grid' ? 'bg-bamboo/15 font-medium text-ink' : 'text-ink-soft hover:text-ink'"
+                  :aria-pressed="cardView === 'grid'"
+                  @click="cardView = 'grid'"
+                >卡片</button>
+                <button
+                  type="button"
+                  data-card-view="list"
+                  class="rounded-full px-3 py-1 text-xs transition-colors"
+                  :class="cardView === 'list' ? 'bg-bamboo/15 font-medium text-ink' : 'text-ink-soft hover:text-ink'"
+                  :aria-pressed="cardView === 'list'"
+                  @click="cardView = 'list'"
+                >列表</button>
+              </div>
+              <!-- 拖动排序入口 / 完成 -->
+              <button
+                class="flex items-center gap-1.5 rounded-full transition-all duration-300"
+                :class="
+                  arranging
+                    ? 'bg-bamboo px-4 py-1.5 text-xs text-paper hover:opacity-90'
+                    : 'bg-paper-deep/60 px-3.5 py-1.5 text-xs text-ink-soft hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft'
+                "
+                :title="arranging ? undefined : COPY.arrangeNeedTwo"
+                :disabled="!arranging && !arrangeReady"
+                @click="arranging ? finishArrange() : startArrange()"
+              >
+                <ZIcon
+                  name="grip"
+                  :size="14"
+                  :stroke-width="arranging ? 1.4 : 1.25"
+                />
+                {{ arranging ? COPY.arrangeFinish : COPY.arrange }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 位置与范围：仅在选中分组时现身。侧栏高亮在拖动排序中会淡到 opacity-40，
@@ -1328,7 +1337,7 @@ onBeforeUnmount(() => {
           class="mb-5 flex min-w-0 items-center gap-3 text-xs transition-opacity duration-300"
           :class="arranging ? 'pointer-events-none opacity-50' : ''"
         >
-          <nav aria-label="分组路径" class="flex min-w-0 items-center gap-0.5">
+          <nav data-guide="folder-scope" aria-label="分组路径" class="flex min-w-0 items-center gap-0.5">
             <button
               class="shrink-0 rounded-md px-1.5 py-0.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
               @click="backToLibrary"
@@ -1425,6 +1434,7 @@ onBeforeUnmount(() => {
             :arrange="arranging"
             :slot="arranging && drag?.started && drag.path === f.relativePath"
             :badge="badgeFor(f.relativePath, i)"
+            :list="cardView === 'list' && !arranging"
             @menu="openMenu"
             @pick="onPick"
           />
@@ -1435,6 +1445,7 @@ onBeforeUnmount(() => {
     <ContextMenu :open="menu.open" :x="menu.x" :y="menu.y" @close="closeMenu">
       <button
         class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        data-guide="folder-move"
         @click="onMenuMove"
       >
         <ZIcon name="folder" :size="15" class="shrink-0 text-sandal" />
@@ -1572,7 +1583,7 @@ onBeforeUnmount(() => {
       :open="removeTarget !== null"
       :title="COPY.removeDoc"
       :message="COPY.removeDocHint"
-      :confirm-label="COPY.delete"
+      confirm-label="确认删除"
       @confirm="onConfirmRemove"
       @close="removeTarget = null"
     />

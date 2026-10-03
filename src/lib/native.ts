@@ -107,6 +107,10 @@ export const nativeNotes = {
     return invoke<Note[]>('notes_list', { dir, relativePath })
   },
 
+  listAll(dir: string): Promise<Note[]> {
+    return invoke<Note[]>('notes_list_all', { dir })
+  },
+
   add(dir: string, note: Note): Promise<void> {
     return invoke('notes_add', { dir, note })
   },
@@ -136,5 +140,15 @@ export const nativeNotes = {
   /** 分组改名 / 搬家：整棵子树内笔记的路径前缀一起换。 */
   renameFolder(dir: string, from: string, to: string): Promise<void> {
     return invoke('notes_rename_folder', { dir, from, to })
+  },
+}
+
+/** One complete, transactional knowledge-map snapshot per vault. */
+export const nativeKnowledge = {
+  load(dir: string): Promise<string> {
+    return invoke<string>('knowledge_load', { dir })
+  },
+  save(dir: string, content: string): Promise<void> {
+    return invoke('knowledge_save', { dir, content })
   },
 }

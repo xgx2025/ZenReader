@@ -11,17 +11,19 @@ export const CDP = {
   port: Number(process.env.ZEN_CDP_PORT ?? 9222),
 }
 
-async function wsUrl(port) {
+async function wsUrl(port, type) {
   const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-  return list.find((t) => t.type === 'page').webSocketDebuggerUrl
+  const target = list.find((t) => t.type === type)
+  if (!target) throw new Error(`找不到 CDP ${type} 目标`)
+  return target.webSocketDebuggerUrl
 }
 
 /**
  * 借页面里已有的一条 CDP 连接不可行（无法注入），故本模块自己开一条。
  * 返回一个 sender，用完 close()。
  */
-export async function connect(port = CDP.port) {
-  const ws = new WebSocket(await wsUrl(port))
+export async function connect(port = CDP.port, type = 'page') {
+  const ws = new WebSocket(await wsUrl(port, type))
   await new Promise((r) => (ws.onopen = r))
   let id = 0
   const pending = new Map()

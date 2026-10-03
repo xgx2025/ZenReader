@@ -1,6 +1,6 @@
 /**
  * Poetic microcopy — centralized so the "禅" voice stays consistent.
- * (设置→调适, 收藏/书签→驻足, 删除→释怀, 导入→引卷, 文件夹导入→拾整卷,
+ * (收藏/书签→驻足, 删除→释怀, 导入→引卷, 文件夹导入→拾整卷,
  *  笔记→觉悟, 禅模式→禅境, 搜索→寻)
  */
 export const COPY = {
@@ -10,16 +10,19 @@ export const COPY = {
   tagline: '阅·见本心',
 
   library: '书库',
+  knowledgeMap: '知识全局图',
+  knowledgeMapHint: '查看自己的知识体系',
+  newTopic: '新建主题',
   import: '引卷',
   importFolder: '拾整卷',
-  settings: '调适',
+  settings: '设置',
   bookmark: '驻足',
   delete: '释怀',
   note: '觉悟',
   zenMode: '禅境',
   fullscreen: '全屏',
   exitFullscreen: '退出全屏',
-  search: '寻…',
+  search: '搜索书名与正文',
   toc: '目录',
   notes: '觉悟笔记',
 
@@ -39,8 +42,8 @@ export const COPY = {
   newInsight: '新写觉悟',
   editInsight: '重写觉悟',
   freeNote: '自由觉悟',
-  deleteNote: '释怀此悟',
-  deleteNoteHint: '此觉悟将随烟散去，不可复回。',
+  deleteNote: '删除这条笔记',
+  deleteNoteHint: '此笔记及对应高亮将被永久删除，无法恢复。',
   save: '存',
   cancel: '罢',
   copyCode: '复制',
@@ -97,7 +100,7 @@ export const COPY = {
   noReleaseYet: '尚未发布',
   updateCheckFailed: '探问不得，网络有恙',
 
-  // 设置面板（调适）
+  // 设置面板
   theme: '主题',
   themeLight: '明亮',
   themeSepia: '暮色',
@@ -145,8 +148,8 @@ export const COPY = {
 
   openVault: '打开书库',
   refresh: '刷新',
-  removeDoc: '移出书库',
-  removeDocHint: '将释去此卷：本地文件、觉悟笔记与阅读进度一并放下，不可复回。',
+  removeDoc: '删除本地文件',
+  removeDocHint: '将删除书库目录中的此文件，并清除相关觉悟笔记与阅读进度。此操作不可撤销。',
   newFolder: '新建分组',
   folderName: '分组名',
   /** 改名：菜单项、行内输入框的可访问名、以及各类失败的缘由。 */
