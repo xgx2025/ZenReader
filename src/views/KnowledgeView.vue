@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -39,8 +39,10 @@ const linkTarget = ref('')
 const linkKind = ref<KnowledgeRelationKind>('related')
 const vaultDomains = ref<string[]>([])
 const mapScroll = ref<HTMLElement | null>(null)
+const mapViewportWidth = ref(0)
 const overview = ref(false)
-const mapScale = computed(() => overview.value ? 0.76 : 1)
+const userPickedScale = ref(false)
+const mobilePane = ref<'map' | 'detail'>('map')
 
 const topics = computed(() => knowledge.map.topics)
 const selected = computed(() => topics.value.find((topic) => topic.id === selectedId.value))
@@ -55,6 +57,36 @@ const visibleTopics = computed(() => {
 })
 const visibleDomains = computed(() => [...new Set(visibleTopics.value.map((topic) => topic.domain))])
 const canvasWidth = computed(() => Math.max(800, visibleDomains.value.length * 254 + 42))
+const mapScale = computed(() =>
+  overview.value && mapViewportWidth.value
+    ? Math.min(1, Math.max(0.76, (mapViewportWidth.value - 24) / canvasWidth.value))
+    : 1,
+)
+const mapHasOverflow = computed(() =>
+  mapViewportWidth.value > 0 && canvasWidth.value * mapScale.value > mapViewportWidth.value + 4,
+)
+let mapResizeObserver: ResizeObserver | null = null
+watch(mapScroll, (el) => {
+  mapResizeObserver?.disconnect()
+  if (!el) return
+  mapResizeObserver = new ResizeObserver(([entry]) => {
+    mapViewportWidth.value = entry?.contentRect.width ?? el.clientWidth
+  })
+  mapResizeObserver.observe(el)
+}, { flush: 'post' })
+watch([mapViewportWidth, canvasWidth], ([width, canvas]) => {
+  if (!userPickedScale.value && width > 0) overview.value = canvas > width - 24
+})
+onBeforeUnmount(() => mapResizeObserver?.disconnect())
+
+function toggleMapScale() {
+  userPickedScale.value = true
+  overview.value = !overview.value
+}
+
+function scrollMap(direction: -1 | 1) {
+  mapScroll.value?.scrollBy({ left: direction * mapScroll.value.clientWidth * 0.75, behavior: 'smooth' })
+}
 const lanes = computed(() => visibleDomains.value.map((domain, index) => ({
   domain,
   x: 30 + Math.max(0, (canvasWidth.value - (visibleDomains.value.length * 254 + 42)) / 2) + index * 254,
@@ -125,6 +157,7 @@ function selectTopic(id: string) {
   pickingNote.value = false
   showHistory.value = false
   creating.value = false
+  if (window.innerWidth <= 1100) mobilePane.value = 'detail'
 }
 
 watch(topics, (list) => {
@@ -239,7 +272,11 @@ function openNote(path: string, noteId: string) {
     </div>
 
     <main v-else class="knowledge-main flex min-h-0 flex-1 overflow-hidden">
-      <section class="flex min-w-0 flex-1 flex-col px-6 pb-5 pt-6">
+      <div class="knowledge-mobile-tabs" role="group" aria-label="知识图页面">
+        <button :class="mobilePane === 'map' ? 'knowledge-mobile-tab-on' : ''" :aria-pressed="mobilePane === 'map'" @click="mobilePane = 'map'">图谱</button>
+        <button :class="mobilePane === 'detail' ? 'knowledge-mobile-tab-on' : ''" :aria-pressed="mobilePane === 'detail'" @click="mobilePane = 'detail'">主题详情</button>
+      </div>
+      <section class="flex min-w-0 flex-1 flex-col px-6 pb-5 pt-6" :class="mobilePane !== 'map' ? 'knowledge-mobile-hidden' : ''">
         <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <div class="mb-2 flex items-center gap-2 text-[11px] tracking-[0.22em] text-bamboo">
@@ -248,7 +285,7 @@ function openNote(path: string, noteId: string) {
             <h2 class="font-serif text-[30px] leading-tight">让所学，彼此照见。</h2>
             <p class="mt-2 text-sm text-ink-soft">以主题为点，以关系为线；每一种认识，都能回到自己的来处。</p>
           </div>
-          <button class="knowledge-primary inline-flex items-center gap-2 rounded-full bg-bamboo px-5 py-2.5 text-sm text-paper transition-transform hover:-translate-y-0.5" @click="creating = true; newDomain = domainFilter; editing = false; revisiting = false">
+          <button class="knowledge-primary inline-flex items-center gap-2 rounded-full bg-bamboo px-5 py-2.5 text-sm text-paper transition-transform hover:-translate-y-0.5" @click="creating = true; newDomain = domainFilter; editing = false; revisiting = false; mobilePane = 'detail'">
             <ZIcon name="plus" :size="16" /> {{ COPY.newTopic }}
           </button>
         </div>
@@ -259,7 +296,7 @@ function openNote(path: string, noteId: string) {
             <button v-for="domain in domains" :key="domain" class="knowledge-filter" :class="domainFilter === domain ? 'knowledge-filter-on' : ''" @click="domainFilter = domainFilter === domain ? '' : domain">{{ domain }}</button>
           </div>
           <div class="flex items-center gap-2">
-          <button class="flex items-center gap-1 rounded-full border border-line bg-paper/60 px-3 py-1.5 text-xs text-ink-soft hover:text-bamboo" :aria-pressed="overview" @click="overview = !overview"><ZIcon :name="overview ? 'expand' : 'shrink'" :size="13" />{{ overview ? '原寸' : '缩览' }}</button>
+          <button class="flex items-center gap-1 rounded-full border border-line bg-paper/60 px-3 py-1.5 text-xs text-ink-soft hover:text-bamboo" :aria-pressed="overview" @click="toggleMapScale"><ZIcon :name="overview ? 'expand' : 'shrink'" :size="13" />{{ overview ? '原寸' : '缩览' }}</button>
           <label class="flex items-center gap-2 rounded-full border border-line bg-paper/60 px-3 py-1.5 text-ink-soft">
             <ZIcon name="search" :size="14" />
             <input v-model="search" class="w-28 bg-transparent text-xs text-ink outline-none placeholder:text-dusk" placeholder="寻一处知识" aria-label="搜索知识主题" />
@@ -296,13 +333,17 @@ function openNote(path: string, noteId: string) {
             </div>
           </div>
         </div>
-        <div class="mt-3 flex items-center justify-between text-[11px] text-dusk">
-          <span>点选主题查看来处 · 箭头表示依赖 · 虚线表示相辨</span>
+        <div class="mt-3 flex items-center justify-between gap-3 text-xs text-dusk">
+          <span>{{ mapHasOverflow ? '左右滚动查看其余领域' : '点选主题查看来处' }} · 箭头表示依赖 · 虚线表示相辨</span>
+          <div v-if="mapHasOverflow" class="flex shrink-0 items-center gap-1">
+            <button class="rounded-full border border-line px-2 py-1 hover:text-bamboo" aria-label="向左查看知识图" @click="scrollMap(-1)">←</button>
+            <button class="rounded-full border border-line px-2 py-1 hover:text-bamboo" aria-label="向右查看知识图" @click="scrollMap(1)">→</button>
+          </div>
           <span>{{ domains.length }} 个领域 · {{ topics.length }} 个主题 · {{ knowledge.map.relations.length }} 条联系</span>
         </div>
       </section>
 
-      <aside class="knowledge-inspector flex w-[340px] shrink-0 flex-col overflow-y-auto border-l border-line bg-paper/45 px-6 pb-8 pt-7 xl:w-[370px]">
+      <aside class="knowledge-inspector flex w-[340px] shrink-0 flex-col overflow-y-auto border-l border-line bg-paper/45 px-6 pb-8 pt-7 xl:w-[370px]" :class="mobilePane !== 'detail' ? 'knowledge-mobile-hidden' : ''">
         <template v-if="creating">
           <button class="mb-7 flex items-center gap-2 self-start text-xs text-ink-soft hover:text-bamboo" @click="creating = false"><ZIcon name="back" :size="14" /> 返回图谱</button>
           <span class="knowledge-eyebrow">NEW THREAD · 新的一笔</span>
@@ -380,9 +421,9 @@ function openNote(path: string, noteId: string) {
 .knowledge-node { z-index: 1; display: flex; flex-direction: column; width: 196px; height: 96px; border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); border-radius: 14px; padding: 11px 13px 10px; background: var(--paper); box-shadow: 0 3px 10px color-mix(in srgb, var(--ink) 4%, transparent), 0 14px 30px color-mix(in srgb, var(--ink) 4%, transparent); transition: transform .25s, border-color .25s, box-shadow .25s; }
 .knowledge-node:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--bamboo) 55%, transparent); }
 .knowledge-node-on { border-color: var(--bamboo); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bamboo) 12%, transparent), 0 12px 25px color-mix(in srgb, var(--ink) 8%, transparent); }
-.knowledge-node-index { font-family: Georgia, serif; font-size: 10px; letter-spacing: .12em; color: var(--bamboo); }
+.knowledge-node-index { font-family: Georgia, serif; font-size: 11px; letter-spacing: .12em; color: var(--bamboo); }
 .knowledge-node-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin-top: 4px; font-family: var(--font-serif); font-size: 14px; line-height: 1.35; color: var(--ink); }
-.knowledge-node-foot { display: flex; align-items: center; gap: 5px; margin-top: auto; font-size: 11px; color: var(--dusk); }
+.knowledge-node-foot { display: flex; align-items: center; gap: 5px; margin-top: auto; font-size: 12px; color: var(--dusk); }
 .knowledge-inspector { box-shadow: -14px 0 32px color-mix(in srgb, var(--ink) 2%, transparent); }
 .knowledge-eyebrow { font-size: 10px; letter-spacing: .19em; color: var(--bamboo); }
 .knowledge-field { display: block; font-size: 11px; letter-spacing: .08em; color: var(--ink-soft); }
@@ -394,6 +435,15 @@ function openNote(path: string, noteId: string) {
 .knowledge-empty-mark::after { transform: rotate(36deg); }
 .knowledge-empty-mark span { position: absolute; z-index: 1; width: 16px; height: 16px; border: 1px solid var(--bamboo); border-radius: 50%; background: var(--paper); }
 .knowledge-empty-mark span:nth-child(1) { left: 15px; top: 64px; }.knowledge-empty-mark span:nth-child(2) { left: 98px; top: 27px; }.knowledge-empty-mark span:nth-child(3) { left: 86px; top: 83px; }.knowledge-empty-mark span:nth-child(4) { left: 43px; top: 11px; width: 24px; height: 24px; background: var(--bamboo); box-shadow: 0 0 0 8px color-mix(in srgb, var(--bamboo) 11%, transparent); }
-@media (max-width: 980px) { .knowledge-main { flex-direction: column; overflow: auto; }.knowledge-main > section { min-height: 650px; }.knowledge-inspector { width: 100%; min-height: 340px; overflow: visible; border-top: 1px solid var(--line); border-left: 0; } }
+ .knowledge-mobile-tabs { display: none; }
+@media (max-width: 1100px) {
+  .knowledge-main { flex-direction: column; overflow: hidden; }
+  .knowledge-mobile-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding: 10px 24px; }
+  .knowledge-mobile-tabs button { border-radius: 999px; padding: 7px 14px; font-size: 12px; color: var(--ink-soft); }
+  .knowledge-mobile-tabs .knowledge-mobile-tab-on { background: color-mix(in srgb, var(--bamboo) 15%, transparent); color: var(--ink); }
+  .knowledge-main > section { min-height: 0; }
+  .knowledge-main > .knowledge-mobile-hidden { display: none; }
+  .knowledge-inspector { width: 100%; min-height: 0; flex: 1; border-left: 0; }
+}
 @media (prefers-reduced-motion: reduce) { .knowledge-node, .knowledge-primary { transition: none; } }
 </style>

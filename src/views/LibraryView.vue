@@ -739,6 +739,11 @@ const dropTargetLabel = computed(() => {
 
 // —— 拖动排序（手动排布）：就地拖拽 ——
 const arranging = ref(false)
+/** 视图偏好独立于排序与筛选，重开应用仍沿用上次选项。 */
+const cardView = ref<'grid' | 'list'>(
+  window.localStorage.getItem('zenreader:library-view') === 'list' ? 'list' : 'grid',
+)
+watch(cardView, (view) => window.localStorage.setItem('zenreader:library-view', view))
 /** 拖动排序工作序列：当前可见集按自定义序基线投影；拖拽就地重排它。 */
 const arrangePaths = ref<string[]>([])
 const mainRef = ref<HTMLElement | null>(null)
@@ -765,7 +770,9 @@ const cardsToRender = computed<VaultFile[]>(() =>
 
 const gridClass = computed(() =>
   [
-    'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
+    cardView.value === 'list' && !arranging.value
+      ? 'grid grid-cols-1 gap-2 arrange-grid'
+      : 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 arrange-grid',
     // 整片网格淡入：非拖动排序态每次重挂载播放一次（见下方 key）。
     arranging.value ? 'arrange-active' : 'grid-arrive',
   ].join(' '),
@@ -1179,12 +1186,10 @@ onBeforeUnmount(() => {
       </aside>
 
       <main ref="mainRef" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
-        <div
-          class="flex flex-wrap items-center gap-3"
-          :class="crumbs.length ? 'mb-3' : 'mb-6'"
-        >
+        <div class="space-y-3" :class="crumbs.length ? 'mb-3' : 'mb-5'">
+          <div class="flex flex-wrap items-center gap-3">
           <div
-            class="relative min-w-0 max-w-md flex-1 transition-opacity duration-300"
+            class="relative min-w-[240px] max-w-xl flex-1 transition-opacity duration-300"
             :class="arranging ? 'pointer-events-none opacity-50' : ''"
           >
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dusk">
@@ -1255,26 +1260,55 @@ onBeforeUnmount(() => {
             </span>
             <ZIcon name="chevron-down" :size="12" />
           </button>
+          </div>
 
-          <!-- 拖动排序入口 / 完成 -->
-          <button
-            class="flex items-center gap-1.5 rounded-full transition-all duration-300"
-            :class="
-              arranging
-                ? 'bg-bamboo px-4 py-1.5 text-xs text-paper hover:opacity-90'
-                : 'bg-paper-deep/60 px-3.5 py-1.5 text-xs text-ink-soft hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft'
-            "
-            :title="arranging ? undefined : COPY.arrangeNeedTwo"
-            :disabled="!arranging && !arrangeReady"
-            @click="arranging ? finishArrange() : startArrange()"
-          >
-            <ZIcon
-              name="grip"
-              :size="14"
-              :stroke-width="arranging ? 1.4 : 1.25"
-            />
-            {{ arranging ? COPY.arrangeFinish : COPY.arrange }}
-          </button>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs tabular-nums text-dusk">{{ library.filtered.length }} 篇在此</span>
+            <div class="flex items-center gap-2">
+              <div
+                v-if="!arranging"
+                class="flex rounded-full border border-line bg-paper-deep/35 p-0.5"
+                role="group"
+                aria-label="书库视图"
+              >
+                <button
+                  type="button"
+                  data-card-view="grid"
+                  class="rounded-full px-3 py-1 text-xs transition-colors"
+                  :class="cardView === 'grid' ? 'bg-bamboo/15 font-medium text-ink' : 'text-ink-soft hover:text-ink'"
+                  :aria-pressed="cardView === 'grid'"
+                  @click="cardView = 'grid'"
+                >卡片</button>
+                <button
+                  type="button"
+                  data-card-view="list"
+                  class="rounded-full px-3 py-1 text-xs transition-colors"
+                  :class="cardView === 'list' ? 'bg-bamboo/15 font-medium text-ink' : 'text-ink-soft hover:text-ink'"
+                  :aria-pressed="cardView === 'list'"
+                  @click="cardView = 'list'"
+                >列表</button>
+              </div>
+              <!-- 拖动排序入口 / 完成 -->
+              <button
+                class="flex items-center gap-1.5 rounded-full transition-all duration-300"
+                :class="
+                  arranging
+                    ? 'bg-bamboo px-4 py-1.5 text-xs text-paper hover:opacity-90'
+                    : 'bg-paper-deep/60 px-3.5 py-1.5 text-xs text-ink-soft hover:bg-bamboo/10 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-soft'
+                "
+                :title="arranging ? undefined : COPY.arrangeNeedTwo"
+                :disabled="!arranging && !arrangeReady"
+                @click="arranging ? finishArrange() : startArrange()"
+              >
+                <ZIcon
+                  name="grip"
+                  :size="14"
+                  :stroke-width="arranging ? 1.4 : 1.25"
+                />
+                {{ arranging ? COPY.arrangeFinish : COPY.arrange }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 位置与范围：仅在选中分组时现身。侧栏高亮在拖动排序中会淡到 opacity-40，
@@ -1383,6 +1417,7 @@ onBeforeUnmount(() => {
             :arrange="arranging"
             :slot="arranging && drag?.started && drag.path === f.relativePath"
             :badge="badgeFor(f.relativePath, i)"
+            :list="cardView === 'list' && !arranging"
             @menu="openMenu"
             @pick="onPick"
           />

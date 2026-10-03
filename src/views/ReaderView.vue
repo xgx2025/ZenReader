@@ -74,6 +74,8 @@ const { notify } = useToast()
 const showToc = ref(false)
 const showNotes = ref(false)
 const showShortcuts = ref(false)
+const showReadingTools = ref(false)
+const readingToolsRef = ref<HTMLElement | null>(null)
 const activeNoteId = ref<string | null>(null)
 
 interface ComposerState {
@@ -232,8 +234,14 @@ let htmlLastY = 0
  *  注意：computed 不解包 getter 返回的 ref——此处必须取 .value 解成布尔，
  *  否则 headerHidden 恒为 truthy，顶栏永远被 -translate-y-full 抬出屏外。 */
 const headerHidden = computed(() =>
-  isHtml.value ? htmlToolbarHidden.value : toolbarHidden.value,
+  showReadingTools.value ? false : isHtml.value ? htmlToolbarHidden.value : toolbarHidden.value,
 )
+
+function onReadingToolsPointerDown(e: PointerEvent) {
+  if (readingToolsRef.value && !readingToolsRef.value.contains(e.target as Node)) {
+    showReadingTools.value = false
+  }
+}
 
 /**
  * 顶栏外观：md 的条在文档流内；html 则浮出流外、固定悬浮在文档上方——
@@ -354,6 +362,7 @@ function onHtmlKey(e: { key: string; shiftKey: boolean }) {
   switch (e.key) {
     case 'Escape':
       if (composerOpen.value) composer.value = null
+      else if (showReadingTools.value) showReadingTools.value = false
       else if (settings.zenMode) setZen(false)
       else if (showNotes.value) showNotes.value = false
       else if (showToc.value) showToc.value = false
@@ -952,12 +961,17 @@ function isTypingTarget(e: KeyboardEvent): boolean {
     t.tagName === 'INPUT' ||
     t.tagName === 'TEXTAREA' ||
     t.tagName === 'SELECT' ||
+    t.tagName === 'BUTTON' ||
     t.isContentEditable
   )
 }
 
 function onKeydown(e: KeyboardEvent) {
   if (e.metaKey || e.ctrlKey || e.altKey) return
+  if (e.key === 'Escape' && showReadingTools.value) {
+    showReadingTools.value = false
+    return
+  }
   if (isTypingTarget(e)) return
 
   // html：阅读区就是沙箱 iframe。滚动/面板键统一交给帧侧语义（与 agent 转发一致），
@@ -972,6 +986,8 @@ function onKeydown(e: KeyboardEvent) {
     case 'Escape':
       if (composerOpen.value) {
         composer.value = null
+      } else if (showReadingTools.value) {
+        showReadingTools.value = false
       } else if (settings.zenMode) {
         setZen(false)
       } else if (showNotes.value) {
@@ -1043,11 +1059,13 @@ watch(
 onMounted(() => {
   loadDocument()
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('pointerdown', onReadingToolsPointerDown)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('pointerdown', onReadingToolsPointerDown)
   window.removeEventListener('beforeunload', onBeforeUnload)
   document.title = COPY.appTitle
   if (puffTimer) clearTimeout(puffTimer)
@@ -1109,82 +1127,71 @@ watch(() => route.params.path, loadDocument)
   
         <div class="flex shrink-0 items-center gap-1">
           <button
-            class="flex h-9 items-center justify-center rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :title="COPY.toc"
+            class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="`${COPY.toc} · T`"
+            :aria-label="`${COPY.toc} · T`"
+            :aria-pressed="showToc"
             @click="showToc = !showToc"
           >
             <ZIcon name="toc" :size="17" />
+            <span class="hidden sm:inline">{{ COPY.toc }}</span>
           </button>
-  
-          <span class="mx-1 h-5 w-px bg-line" />
-  
+
           <button
-            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            @click="stepFont(-1)"
-          >
-            <ZIcon name="minus" :size="15" />
-          </button>
-          <span class="w-9 text-center text-xs text-dusk tabular-nums">{{
-            isHtml ? `${htmlZoomPct}%` : settings.fontSize
-          }}</span>
-          <button
-            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            @click="stepFont(1)"
-          >
-            <ZIcon name="plus" :size="15" />
-          </button>
-  
-          <span class="mx-1 h-5 w-px bg-line" />
-  
-          <button
-            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :title="COPY.theme"
-            @click="cycleTheme"
-          >
-            <ZIcon :name="THEME_ICON[settings.theme]" :size="17" />
-          </button>
-          <button
-            class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :title="`${COPY.reading}${COPY.settings}`"
-            :aria-label="`${COPY.reading}${COPY.settings}`"
-            @click="openPanel('reading')"
-          >
-            <ZIcon name="settings" :size="17" />
-            <span class="text-xs">{{ COPY.typography }}</span>
-          </button>
-  
-          <button
-            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :title="COPY.shortcutSheet"
-            @click="showShortcuts = true"
-          >
-            <ZIcon name="keyboard" :size="16" />
-          </button>
-  
-          <span class="mx-1 h-5 w-px bg-line" />
-  
-          <button
-            class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :title="COPY.notes"
+            class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+            :title="`${COPY.notes} · N`"
+            :aria-label="`${COPY.notes} · N`"
+            :aria-pressed="showNotes"
             @click="showNotes = !showNotes"
           >
             <ZIcon name="note" :size="16" />
-            <span v-if="notesStore.notes.length" class="text-xs text-sandal">
-              {{ notesStore.notes.length }}
-            </span>
+            <span class="hidden sm:inline">{{ COPY.note }}</span>
+            <span v-if="notesStore.notes.length" class="text-xs tabular-nums text-sandal">{{ notesStore.notes.length }}</span>
           </button>
-  
-          <button
-            class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-            :title="isFullscreen ? COPY.exitFullscreen : COPY.fullscreen"
-            @click="toggleFullscreen"
-          >
-            <ZIcon :name="isFullscreen ? 'shrink' : 'expand'" :size="17" />
-          </button>
+
+          <div ref="readingToolsRef" class="relative">
+            <button
+              class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+              aria-haspopup="dialog"
+              aria-controls="reader-display-menu"
+              :aria-expanded="showReadingTools"
+              @click="showReadingTools = !showReadingTools"
+            >
+              <ZIcon name="settings" :size="17" />
+              <span class="hidden sm:inline">阅读设置</span>
+              <ZIcon name="chevron-down" :size="12" />
+            </button>
+            <div
+              v-if="showReadingTools"
+              id="reader-display-menu"
+              role="dialog"
+              aria-label="阅读设置"
+              class="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-line bg-paper p-4 shadow-zen-lg"
+              @keydown.esc.stop.prevent="showReadingTools = false"
+            >
+              <div class="flex items-center justify-between text-sm text-ink">
+                <span>{{ isHtml ? '页面缩放' : '正文字号' }}</span>
+                <div class="flex items-center gap-2">
+                  <button class="flex h-8 w-8 items-center justify-center rounded-full bg-paper-deep text-ink-soft hover:text-ink" :aria-label="isHtml ? '缩小页面' : '缩小字号'" @click="stepFont(-1)"><ZIcon name="minus" :size="15" /></button>
+                  <span class="min-w-8 text-center text-xs tabular-nums text-ink-soft">{{ isHtml ? `${htmlZoomPct}%` : settings.fontSize }}</span>
+                  <button class="flex h-8 w-8 items-center justify-center rounded-full bg-paper-deep text-ink-soft hover:text-ink" :aria-label="isHtml ? '放大页面' : '放大字号'" @click="stepFont(1)"><ZIcon name="plus" :size="15" /></button>
+                </div>
+              </div>
+              <div class="my-3 h-px bg-line"></div>
+              <button class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="cycleTheme">
+                <span class="flex items-center gap-2"><ZIcon :name="THEME_ICON[settings.theme]" :size="16" />主题</span>
+                <span class="text-xs">{{ settings.theme === 'light' ? '浅色' : settings.theme === 'sepia' ? '暖色' : '暗色' }} →</span>
+              </button>
+              <button class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="openPanel('reading'); showReadingTools = false"><ZIcon name="settings" :size="16" />更多排版设置</button>
+              <button class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="showShortcuts = true; showReadingTools = false"><ZIcon name="keyboard" :size="16" />{{ COPY.shortcutSheet }}</button>
+              <button class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="toggleFullscreen(); showReadingTools = false"><ZIcon :name="isFullscreen ? 'shrink' : 'expand'" :size="16" />{{ isFullscreen ? COPY.exitFullscreen : COPY.fullscreen }}</button>
+            </div>
+          </div>
   
         <button
           class="flex h-9 items-center gap-1.5 rounded-full bg-bamboo/15 px-3 text-sm text-bamboo transition-colors hover:bg-bamboo/25"
-          :title="COPY.zenMode"
+          :title="`${COPY.zenMode} · Z`"
+          :aria-label="`${COPY.zenMode} · Z`"
           @click="setZen(true)"
         >
           <ZIcon name="zen" :size="16" />

@@ -24,8 +24,10 @@ const props = withDefaults(
     clone?: boolean
     /** 右上角小标（序号「3」或「新」）；仅拖动排序/克隆非空。 */
     badge?: string
+    /** 列表视图：大量文档时以紧凑的一行展示。 */
+    list?: boolean
   }>(),
-  { query: '', arrange: false, slot: false, clone: false, badge: '' },
+  { query: '', arrange: false, slot: false, clone: false, badge: '', list: false },
 )
 
 const emit = defineEmits<{
@@ -82,6 +84,9 @@ const hit = computed(() => {
   }
 })
 
+/** 尚未索引出摘要的卷也要有完整形制，但不预留一块空的摘要区。 */
+const compact = computed(() => !props.list && !hit.value && !props.meta?.excerpt)
+
 // —— 拖动排序相关形态 ——
 const arranging = computed(() => props.arrange || props.slot || props.clone)
 /** 拖动排序中"可被拿起"的真身卡（占位/克隆不参与）。 */
@@ -137,14 +142,25 @@ const isNewBadge = computed(
     <component
       :is="surface"
       :to="linkTo"
-      class="flex min-w-0 flex-1 flex-col rounded-2xl bg-paper-deep/40 p-4 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
+      class="flex min-w-0 flex-1 bg-paper-deep/40 transition-all duration-300 ease-zen hover:-translate-y-0.5 hover:bg-paper-deep/60 hover:shadow-zen-md"
+      :class="list
+        ? 'min-h-[56px] flex-row items-center gap-4 rounded-xl border border-line/60 py-2 pl-4 pr-12'
+        : compact
+          ? 'min-h-[108px] flex-col rounded-2xl p-4'
+          : 'min-h-[148px] flex-col rounded-2xl p-4'"
       :role="arranging ? 'button' : undefined"
       :tabindex="pickable ? 0 : undefined"
       :aria-label="pickable ? title : undefined"
       @pointerdown="onSurfacePointerDown"
     >
-      <div class="flex items-start justify-between gap-2">
-        <h3 class="min-h-[2lh] font-serif font-bold text-lg leading-snug text-ink line-clamp-2">
+      <div class="flex min-w-0 items-start justify-between gap-2" :class="list ? 'flex-1 flex-wrap items-center' : ''">
+        <h3
+          class="min-w-0 font-serif font-bold leading-snug text-ink"
+          :class="[
+            list ? 'flex-1 line-clamp-1 text-base' : 'min-h-[2lh] text-lg line-clamp-2',
+            arranging && badge ? 'pr-8' : '',
+          ]"
+        >
           {{ title }}
         </h3>
         <span
@@ -154,39 +170,40 @@ const isNewBadge = computed(
           <span class="h-1 w-1 rounded-full bg-bamboo"></span>
           {{ COPY.finished }}
         </span>
+        <p v-if="list && hit" class="order-last basis-full truncate text-xs text-dusk">
+          {{ hit.lead }}{{ hit.before }}{{ hit.match }}{{ hit.after }}{{ hit.tail }}
+        </p>
       </div>
 
       <!-- 全文命中片段优先于摘要，说明命中缘由 -->
       <p
-        v-if="hit"
+        v-if="hit && !list"
         class="mt-2 break-words text-xs leading-relaxed text-dusk"
       >
         {{ hit.lead }}{{ hit.before }}<mark class="rounded-sm bg-bamboo/20 px-0.5 text-ink">{{ hit.match }}</mark>{{ hit.after }}{{ hit.tail }}
       </p>
       <p
-        v-else-if="meta?.excerpt"
+        v-else-if="meta?.excerpt && !list"
         class="mt-2 text-sm leading-relaxed text-ink-soft line-clamp-3"
       >
         {{ meta.excerpt }}
       </p>
 
-      <!-- 底部信息：固定占位的进度条 + 元信息，统一贴底对齐 -->
-      <div class="mt-auto pt-4">
-        <div class="flex h-4 items-center gap-2">
-          <template v-if="reading">
-            <div class="h-0.5 flex-1 overflow-hidden rounded-full bg-line">
-              <div
-                class="h-full rounded-full bg-bamboo/60"
-                :style="{ width: `${Math.round(reading.ratio * 100)}%` }"
-              />
-            </div>
-            <span class="shrink-0 text-[11px] tabular-nums text-dusk">
-              {{ COPY.readingProgress }} {{ Math.round(reading.ratio * 100) }}%
-            </span>
-          </template>
+      <!-- 阅读进度与元信息：仅在有进度时占一行。 -->
+      <div :class="list ? 'ml-auto shrink-0' : 'mt-auto pt-3'">
+        <div v-if="reading" class="flex h-4 items-center gap-2" :class="list ? 'ml-auto w-36' : ''">
+          <div class="h-0.5 flex-1 overflow-hidden rounded-full bg-line">
+            <div
+              class="h-full rounded-full bg-bamboo/60"
+              :style="{ width: `${Math.round(reading.ratio * 100)}%` }"
+            />
+          </div>
+          <span class="shrink-0 text-[11px] tabular-nums text-dusk">
+            {{ COPY.readingProgress }} {{ Math.round(reading.ratio * 100) }}%
+          </span>
         </div>
 
-        <div class="mt-3 flex items-center gap-3 text-[11px] text-dusk">
+        <div class="flex items-center gap-2.5 text-xs text-dusk" :class="reading ? 'mt-2' : ''">
           <span v-if="folderPath" class="truncate">{{ folderPath }}</span>
           <template v-if="meta">
             <span>{{ meta.wordCount }} {{ COPY.words }}</span>
@@ -223,6 +240,7 @@ const isNewBadge = computed(
       v-if="!arranging"
       class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full text-ink-soft opacity-0 transition-opacity duration-200 hover:bg-bamboo/10 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
       :title="COPY.moreActions"
+      :aria-label="`${title} · ${COPY.moreActions}`"
       @click.prevent.stop="onMore"
     >
       <ZIcon name="more" :size="16" />
