@@ -6,12 +6,14 @@ import type { IconName } from '@/components/common/ZIcon.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { COPY } from '@/lib/copy'
+import { useGuide } from '@/composables/useGuide'
 import type { ThemeName } from '@/types/settings'
 
 defineProps<{ active: 'library' | 'knowledge' }>()
 
 const settings = useSettingsStore()
 const { openPanel } = useSettingsPanel()
+const { helpOpen } = useGuide()
 const themes: ThemeName[] = ['light', 'sepia', 'dark']
 const themeIcon: Record<ThemeName, IconName> = {
   light: 'sun',
@@ -51,6 +53,13 @@ function cycleTheme() {
 
     <div class="flex min-w-0 items-center justify-end gap-1.5">
       <slot name="actions" />
+      <button
+        type="button"
+        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        title="使用指引"
+        aria-label="使用指引"
+        @click="helpOpen = true"
+      ><ZIcon name="about" :size="17" /></button>
       <button
         type="button"
         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"

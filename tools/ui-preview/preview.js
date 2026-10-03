@@ -234,6 +234,8 @@
       switch (cmd) {
         case 'read_settings':
           return Promise.resolve(readSettings())
+        case 'pick_folder':
+          return Promise.resolve(settings.vaultPath)
         case 'read_vault':
           return Promise.resolve(listing())
         case 'set_active_vault':

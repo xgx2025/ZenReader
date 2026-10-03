@@ -30,11 +30,19 @@ import {
 } from '@/lib/folderTree'
 import { folderPathFromRelative, isPathInFolder, rewritePathPrefix } from '@/lib/vault'
 import { DEFAULT_SETTINGS, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '@/types/settings'
+import { useGuide } from '@/composables/useGuide'
 import type { FormatFilter, VaultFile } from '@/types/document'
 
 const library = useLibraryStore()
 const settings = useSettingsStore()
 const { notify } = useToast()
+const { active: activeGuide, guideEvent, suggestGuide, finishGuide } = useGuide()
+
+async function onOpenVault() {
+  if (!await library.openVault()) return
+  guideEvent('vault-opened')
+  if (library.files.length === 0) suggestGuide('import')
+}
 
 const SORTS = [
   { key: 'modified', label: '最近修改' },
@@ -129,6 +137,7 @@ function selectFolder(path: string) {
 
 function onFolderSelect(path: string) {
   selectFolder(path)
+  suggestGuide('folder-scope')
   // 焦点跟着意图走：再按方向键时从刚点过的那一行继续，而非从旧位置。
   focusedFolder.value = path
   nextTick(() => focusRow(path))
@@ -253,6 +262,7 @@ const removeTarget = ref<VaultFile | null>(null)
 
 function openMenu(file: VaultFile, x: number, y: number) {
   menu.value = { open: true, x, y, file }
+  suggestGuide('folder-move')
 }
 
 function closeMenu() {
@@ -609,12 +619,14 @@ const newFolderParentLabel = computed(() => {
 
 function startCreating() {
   creating.value = true
+  suggestGuide('folder-create')
   newFolderName.value = ''
   newFolderError.value = ''
   nextTick(() => newFolderInput.value?.focus())
 }
 
 function cancelCreating() {
+  if (activeGuide.value === 'folder-create') finishGuide(true)
   creating.value = false
   newFolderName.value = ''
   newFolderError.value = ''
@@ -652,8 +664,10 @@ async function submitFolder() {
   try {
     await library.createFolder(newFolderName.value.trim())
     notify(COPY.folderCreated)
+    guideEvent('folder-created')
   } catch {
     notify(COPY.opFailed, 'sandal')
+    return
   }
   cancelCreating()
 }
@@ -947,10 +961,11 @@ function resetSidebarWidth() {
   settings.update({ sidebarWidth: DEFAULT_SETTINGS.sidebarWidth })
 }
 
-onMounted(() => {
-  library.refresh()
+onMounted(async () => {
   window.addEventListener('focus', onWindowFocus)
   window.addEventListener('keydown', onGlobalKey)
+  const ready = await library.refresh()
+  if (ready && library.files.length === 0) suggestGuide('import')
 })
 
 onBeforeUnmount(() => {
@@ -976,6 +991,7 @@ onBeforeUnmount(() => {
         </button>
         <RouterLink
           to="/import"
+          data-guide="import-link"
           class="inline-flex items-center gap-2 rounded-full bg-bamboo px-4 py-1.5 text-sm text-paper transition-opacity hover:opacity-90"
         >
           <ZIcon name="import" :size="16" />
@@ -994,7 +1010,8 @@ onBeforeUnmount(() => {
       <p class="mt-2 text-sm tracking-wide text-dusk">{{ COPY.tagline }}</p>
       <button
         class="mt-8 inline-flex items-center gap-2 rounded-full bg-bamboo px-6 py-2.5 text-sm text-paper transition-opacity hover:opacity-90"
-        @click="library.openVault()"
+        data-guide="open-vault"
+        @click="onOpenVault"
       >
         <ZIcon name="folder" :size="16" />
         {{ COPY.openVault }}
@@ -1065,7 +1082,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
 
-          <div v-if="creating" class="side-form">
+          <div v-if="creating" data-guide="folder-create" class="side-form">
             <!-- 落点由当前选中分组暗定；不说出来就一定会有人建错层 -->
             <p class="text-[11px] leading-snug text-ink-soft/85">
               {{ COPY.newFolderUnder }}
@@ -1185,7 +1202,7 @@ onBeforeUnmount(() => {
         ></div>
       </aside>
 
-      <main ref="mainRef" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
+      <main ref="mainRef" data-guide="library-main" class="h-full min-w-0 flex-1 overflow-y-auto p-6">
         <div class="space-y-3" :class="crumbs.length ? 'mb-3' : 'mb-5'">
           <div class="flex flex-wrap items-center gap-3">
           <div
@@ -1320,7 +1337,7 @@ onBeforeUnmount(() => {
           class="mb-5 flex min-w-0 items-center gap-3 text-xs transition-opacity duration-300"
           :class="arranging ? 'pointer-events-none opacity-50' : ''"
         >
-          <nav aria-label="分组路径" class="flex min-w-0 items-center gap-0.5">
+          <nav data-guide="folder-scope" aria-label="分组路径" class="flex min-w-0 items-center gap-0.5">
             <button
               class="shrink-0 rounded-md px-1.5 py-0.5 text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
               @click="backToLibrary"
@@ -1428,6 +1445,7 @@ onBeforeUnmount(() => {
     <ContextMenu :open="menu.open" :x="menu.x" :y="menu.y" @close="closeMenu">
       <button
         class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        data-guide="folder-move"
         @click="onMenuMove"
       >
         <ZIcon name="folder" :size="15" class="shrink-0 text-sandal" />
@@ -1565,7 +1583,7 @@ onBeforeUnmount(() => {
       :open="removeTarget !== null"
       :title="COPY.removeDoc"
       :message="COPY.removeDocHint"
-      :confirm-label="COPY.delete"
+      confirm-label="确认删除"
       @confirm="onConfirmRemove"
       @close="removeTarget = null"
     />

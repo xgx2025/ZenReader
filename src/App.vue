@@ -5,6 +5,7 @@ import { RouterView } from 'vue-router'
 import SettingsPanel from '@/components/settings/SettingsPanel.vue'
 import PaperTexture from '@/components/common/PaperTexture.vue'
 import ToastHost from '@/components/common/ToastHost.vue'
+import GuideHost from '@/components/common/GuideHost.vue'
 import ReminderToast from '@/components/reader/ReminderToast.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
@@ -57,4 +58,5 @@ onBeforeUnmount(() => {
   <ReminderToast />
 
   <ToastHost />
+  <GuideHost />
 </template>

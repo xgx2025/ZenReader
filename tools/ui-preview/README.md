@@ -113,3 +113,24 @@ node tools/ui-preview/app-drag-stability.mjs    # 真机：同一手势连做 N 
 | 折页与书架图标的水平中心 | 相等（本机 29） |
 
 `measure.mjs` 末尾会把这三条直接打出来。
+
+## 新用户指引真机探针
+
+先用独立的 Tauri 标识构建 release 版。探针启动后会核对标识，再把临时书库写到专用配置；
+传入普通 `zenreader.exe` 会立即拒绝运行。
+
+```powershell
+npx tauri build --no-bundle --config tools/ui-preview/tauri-guide-probe.conf.json
+New-Item -ItemType Directory -Force tmp | Out-Null
+Copy-Item src-tauri/target/release/zenreader.exe tmp/zenreader-guide-probe.exe
+node tools/ui-preview/app-guide-probe.mjs --exe=tmp/zenreader-guide-probe.exe --format=md --runs=3
+node tools/ui-preview/app-guide-probe.mjs --exe=tmp/zenreader-guide-probe.exe --format=html --runs=3
+node tools/ui-preview/app-import-guide-probe.mjs --exe=tmp/zenreader-guide-probe.exe
+npx tauri build --no-bundle # 恢复普通应用标识
+```
+
+前两条用 WebView2 的真实鼠标选区、浮栏点击和笔记保存判定教程推进。HTML 选区在沙箱
+iframe 的 CDP 目标中派发鼠标事件；`--debug=1` 只用于排查，稳定性判据用裸跑。
+引卷探针验证空库提示、不支持文件不推进、单文件与整文件夹入库及返回书库后完成。
+生成的书库与截图在 `tmp/guide-probe-*`、`tmp/guide-import-probe-*`；专用应用配置在
+`com.zenreader.guideprobe`，测试后可清理。

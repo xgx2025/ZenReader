@@ -10,12 +10,14 @@ import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useLibraryStore } from '@/stores/library'
 import { useToast } from '@/composables/useToast'
 import { COPY } from '@/lib/copy'
+import { useGuide } from '@/composables/useGuide'
 import type { ImportResult } from '@/types/import'
 
 const { items, importing, importFiles, importPaths } = useFileImport()
 const library = useLibraryStore()
 const { notify } = useToast()
 const { openPanel } = useSettingsPanel()
+const { helpOpen, guideEvent } = useGuide()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
@@ -54,6 +56,7 @@ async function start(run: () => Promise<ImportResult>) {
   result.value = null
   const r = await run()
   result.value = r
+  if (r.imported > 0) guideEvent('imported')
 
   await nextTick()
   resultEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -102,7 +105,7 @@ const STATUS_CLASS: Record<string, string> = {
 </script>
 
 <template>
-  <div class="min-h-screen text-ink">
+  <div class="min-h-screen text-ink" :data-guide-importing="importing || undefined">
     <header
       class="header-fade relative flex items-center justify-between gap-3 bg-paper/55 px-6 py-4 backdrop-blur-md"
     >
@@ -120,11 +123,14 @@ const STATUS_CLASS: Record<string, string> = {
           <p class="text-xs text-dusk">{{ COPY.importDropHint }}</p>
         </div>
       </div>
-      <button
-        class="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
-        :title="COPY.settings"
-        @click="openPanel('library')"
-      ><ZIcon name="settings" :size="17" />{{ COPY.settings }}</button>
+      <div class="flex items-center gap-1">
+        <button class="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft hover:bg-bamboo/10 hover:text-ink" title="使用指引" aria-label="使用指引" @click="helpOpen = true"><ZIcon name="about" :size="17" /></button>
+        <button
+          class="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+          :title="COPY.settings"
+          @click="openPanel('library')"
+        ><ZIcon name="settings" :size="17" />{{ COPY.settings }}</button>
+      </div>
     </header>
 
     <main class="mx-auto max-w-2xl p-6">
@@ -145,7 +151,7 @@ const STATUS_CLASS: Record<string, string> = {
 
       <template v-else>
         <!-- 目标分组：自绘下拉，原生 select 不再突兀 -->
-        <div class="mb-4 flex items-center gap-3 rounded-xl bg-paper-deep/40 px-4 py-3">
+        <div data-guide="import-target" class="mb-4 flex items-center gap-3 rounded-xl bg-paper-deep/40 px-4 py-3">
           <ZIcon name="folder" :size="16" class="shrink-0 text-sandal" />
           <label class="shrink-0 text-sm text-ink-soft">{{ COPY.importTo }}</label>
           <div class="relative min-w-0 flex-1">
@@ -183,7 +189,7 @@ const STATUS_CLASS: Record<string, string> = {
           <p v-if="!importing" class="mt-1 text-xs text-dusk">{{ COPY.importExtHint }}</p>
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-3">
+        <div data-guide="import-actions" class="mt-4 flex flex-wrap gap-3">
           <button
             class="flex flex-1 items-center justify-center gap-2 rounded-full bg-paper-deep/60 px-4 py-2.5 text-sm text-ink shadow-zen-sm transition-colors hover:bg-paper-deep disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="importing"
@@ -240,6 +246,7 @@ const STATUS_CLASS: Record<string, string> = {
         <div
           v-if="result"
           ref="resultEl"
+          data-guide="import-result"
           class="mt-6 rounded-xl bg-paper-deep/40 p-5 text-center shadow-zen-sm"
         >
           <p class="font-serif text-lg text-ink">

@@ -197,20 +197,20 @@ export const useLibraryStore = defineStore('library', () => {
       : { here: 0, below: 0 },
   )
 
-  async function refresh() {
+  async function refresh(): Promise<boolean> {
     if (!hasVault.value) {
       files.value = []
       dirs.value = []
       index.value = {}
       resetArrange()
       hydrateKey = '' // 清库后重开同一库也要重新读盘，不能沿用内存残留
-      return
+      return false
     }
     loading.value = true
     const path = settings.vaultPath
     try {
       const listing = await nativeFs.readVault(path)
-      if (settings.vaultPath !== path) return // 读盘期间已换库/清库：丢弃这次结果
+      if (settings.vaultPath !== path) return false // 读盘期间已换库/清库：丢弃这次结果
       // HTML 原样式直读的 zenasset:// 资产按"活跃书库根"收敛——开库/刷新即上报
       // 一次（fire-and-forget 兜底；reader.open 每次打开也防御性上报）。浏览器 dev 空操作。
       if (isTauri()) void nativeFs.setActiveVault(path).catch(() => {})
@@ -220,7 +220,7 @@ export const useLibraryStore = defineStore('library', () => {
       if (hydrateKey !== path) {
         hydrateKey = path
         const p = await loadArrange(path)
-        if (settings.vaultPath !== path) return // 载序期间换库：等新库自己的 refresh
+        if (settings.vaultPath !== path) return false // 载序期间换库：等新库自己的 refresh
         customOrder.value = p?.customOrder ?? []
         folderOrder.value = p?.folderOrder ?? []
         arranged.value = p?.arranged ?? false
@@ -245,6 +245,7 @@ export const useLibraryStore = defineStore('library', () => {
         if (!live.has(key)) delete index.value[key]
       }
       indexVault(listing.files)
+      return true
     } catch (e) {
       console.error('[zenreader] read_vault failed', e)
       files.value = []
@@ -253,6 +254,7 @@ export const useLibraryStore = defineStore('library', () => {
       hydrateKey = '' // 重试时重新读盘，不沿用残缺内存态
       // 读库失败不再静默成「尚无书籍」，轻声告知用户原因。
       useToast().notify(COPY.vaultReadFailed, 'sandal')
+      return false
     } finally {
       loading.value = false
     }
@@ -260,9 +262,9 @@ export const useLibraryStore = defineStore('library', () => {
 
   async function openVault() {
     const dir = await nativeFs.pickFolder()
-    if (!dir) return
+    if (!dir) return false
     settings.setVaultPath(dir)
-    await refresh()
+    return refresh()
   }
 
   /** 用户显式点排序胶囊某档（非 auto）——记住该档。 */

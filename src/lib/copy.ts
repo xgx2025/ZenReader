@@ -42,8 +42,8 @@ export const COPY = {
   newInsight: '新写觉悟',
   editInsight: '重写觉悟',
   freeNote: '自由觉悟',
-  deleteNote: '释怀此悟',
-  deleteNoteHint: '此觉悟将随烟散去，不可复回。',
+  deleteNote: '删除这条笔记',
+  deleteNoteHint: '此笔记及对应高亮将被永久删除，无法恢复。',
   save: '存',
   cancel: '罢',
   copyCode: '复制',
@@ -148,8 +148,8 @@ export const COPY = {
 
   openVault: '打开书库',
   refresh: '刷新',
-  removeDoc: '移出书库',
-  removeDocHint: '将释去此卷：本地文件、觉悟笔记与阅读进度一并放下，不可复回。',
+  removeDoc: '删除本地文件',
+  removeDocHint: '将删除书库目录中的此文件，并清除相关觉悟笔记与阅读进度。此操作不可撤销。',
   newFolder: '新建分组',
   folderName: '分组名',
   /** 改名：菜单项、行内输入框的可访问名、以及各类失败的缘由。 */

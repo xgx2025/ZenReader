@@ -8,6 +8,7 @@ import ZIcon from '@/components/common/ZIcon.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables/useToast'
+import { useGuide } from '@/composables/useGuide'
 import { nativeFs } from '@/lib/native'
 import { COPY } from '@/lib/copy'
 import type { EvidenceRole, KnowledgeRelationKind, KnowledgeTopic } from '@/types/knowledge'
@@ -17,6 +18,7 @@ const settings = useSettingsStore()
 const router = useRouter()
 const route = useRoute()
 const { notify } = useToast()
+const { guideEvent, suggestGuide } = useGuide()
 
 const selectedId = ref('')
 const domainFilter = ref('')
@@ -152,6 +154,7 @@ function selectTopic(id: string) {
     search.value = ''
   }
   selectedId.value = id
+  guideEvent('topic-ready')
   editing.value = false
   revisiting.value = false
   pickingNote.value = false
@@ -182,14 +185,17 @@ onMounted(async () => {
   }
   await knowledge.load(true)
   if (!selectedId.value) selectedId.value = topics.value[0]?.id ?? ''
+  if (knowledge.notes.length) suggestGuide('knowledge', topics.value.length ? 1 : 0)
 })
 
 async function run(action: () => Promise<unknown>, success: string) {
   try {
     await action()
     notify(success, 'bamboo')
+    return true
   } catch {
     notify('未能保存知识图，请稍后重试', 'sandal')
+    return false
   }
 }
 
@@ -218,10 +224,11 @@ function startEdit(topic: KnowledgeTopic) {
 async function saveEdit() {
   if (!selected.value || !editTitle.value.trim()) return
   const id = selected.value.id
-  await run(() => knowledge.updateTopic(id, {
+  const saved = await run(() => knowledge.updateTopic(id, {
     title: editTitle.value, domain: editDomain.value, summary: editSummary.value,
   }), '此刻的认识已存')
-  editing.value = false
+  if (saved && editSummary.value.trim()) guideEvent('summary-saved')
+  if (saved) editing.value = false
 }
 
 async function removeSelected() {
@@ -239,7 +246,8 @@ async function connect() {
 
 async function attach(noteId: string) {
   if (!selected.value) return
-  await run(() => knowledge.addEvidence(selected.value!.id, noteId, noteRole.value), '觉悟已归入主题')
+  if (!await run(() => knowledge.addEvidence(selected.value!.id, noteId, noteRole.value), '觉悟已归入主题')) return
+  guideEvent('evidence-attached')
   pickingNote.value = false
   noteSearch.value = ''
   if (route.query.note) void router.replace('/knowledge')
@@ -247,11 +255,12 @@ async function attach(noteId: string) {
 
 async function saveRevisit() {
   if (!selected.value || !freshAnswer.value.trim()) return
-  await run(() => knowledge.updateTopic(selected.value!.id, {
+  if (!await run(() => knowledge.updateTopic(selected.value!.id, {
     title: selected.value!.title,
     domain: selected.value!.domain,
     summary: freshAnswer.value,
-  }), '新的认识已存，旧的留在年轮里')
+  }), '新的认识已存，旧的留在年轮里')) return
+  guideEvent('summary-saved')
   revisiting.value = false
   freshAnswer.value = ''
 }
@@ -285,7 +294,7 @@ function openNote(path: string, noteId: string) {
             <h2 class="font-serif text-[30px] leading-tight">让所学，彼此照见。</h2>
             <p class="mt-2 text-sm text-ink-soft">以主题为点，以关系为线；每一种认识，都能回到自己的来处。</p>
           </div>
-          <button class="knowledge-primary inline-flex items-center gap-2 rounded-full bg-bamboo px-5 py-2.5 text-sm text-paper transition-transform hover:-translate-y-0.5" @click="creating = true; newDomain = domainFilter; editing = false; revisiting = false; mobilePane = 'detail'">
+          <button data-guide="knowledge-topic" class="knowledge-primary inline-flex items-center gap-2 rounded-full bg-bamboo px-5 py-2.5 text-sm text-paper transition-transform hover:-translate-y-0.5" @click="creating = true; newDomain = domainFilter; editing = false; revisiting = false; mobilePane = 'detail'">
             <ZIcon name="plus" :size="16" /> {{ COPY.newTopic }}
           </button>
         </div>
@@ -373,7 +382,7 @@ function openNote(path: string, noteId: string) {
           </template>
           <template v-else>
             <h3 class="font-serif text-[25px] leading-[1.45]">{{ selected.title }}</h3>
-            <div class="mt-6 border-t border-line pt-5">
+            <div data-guide="knowledge-summary" class="mt-6 border-t border-line pt-5">
               <div class="flex items-center justify-between"><span class="knowledge-eyebrow">此刻的认识</span><button class="text-xs text-bamboo hover:underline" @click="startEdit(selected)">修订</button></div>
               <p v-if="selected.summary && !revisiting" class="mt-3 whitespace-pre-wrap font-serif text-[15px] leading-8 text-ink-soft">{{ selected.summary }}</p>
               <button v-else class="mt-3 rounded-xl border border-dashed border-bamboo/35 px-4 py-4 text-left text-sm leading-6 text-ink-soft hover:bg-bamboo/5" @click="startEdit(selected)">还没有结论。把阅读后真正想通的事，写在这里。</button>
@@ -383,7 +392,7 @@ function openNote(path: string, noteId: string) {
               <div v-if="showHistory" class="mt-3 space-y-3 border-l border-bamboo/25 pl-3"><div v-for="revision in [...selected.revisions].reverse()" :key="revision.savedAt" class="text-xs leading-6 text-ink-soft"><span class="text-dusk">{{ revision.savedAt.slice(0, 10) }}</span><p class="whitespace-pre-wrap">{{ revision.summary }}</p></div></div>
             </div>
 
-            <div class="mt-7 border-t border-line pt-5">
+            <div data-guide="knowledge-evidence" class="mt-7 border-t border-line pt-5">
               <div class="flex items-center justify-between"><span class="knowledge-eyebrow">觉悟来处 · {{ selectedEvidence.length }}</span><button class="text-xs text-bamboo hover:underline" @click="pickingNote = !pickingNote">＋ 归入觉悟</button></div>
               <div v-if="pickingNote" class="mt-3 rounded-xl border border-line bg-paper-deep/35 p-3">
                 <input v-model="noteSearch" class="w-full rounded-lg bg-paper px-3 py-2 text-xs text-ink outline-none placeholder:text-dusk" placeholder="寻原文、心得或文档名" />

@@ -65,7 +65,7 @@ function save() {
 
 <template>
   <BaseDialog :open="open" :title="title" max-width="md" @close="emit('cancel')">
-    <div class="p-5">
+    <div data-guide="note-composer" class="p-5">
       <blockquote
         v-if="quote"
         class="border-l-2 border-bamboo pl-3 text-sm leading-relaxed text-ink-soft"

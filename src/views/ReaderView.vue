@@ -42,6 +42,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useProgressStore } from '@/stores/progress'
 import { useSettingsPanel } from '@/composables/useSettingsPanel'
 import { useToast } from '@/composables/useToast'
+import { useGuide } from '@/composables/useGuide'
 import { COPY } from '@/lib/copy'
 import { isTauri, openExternal } from '@/lib/native'
 import { resolveDocLink } from '@/lib/vault'
@@ -70,6 +71,8 @@ const proseEl = ref<HTMLElement | null>(null)
 const proseText = ref('')
 const { capture, visible, dismiss } = useSelectionAnchor(proseEl)
 const { notify } = useToast()
+const { active: activeGuide, helpOpen, guideEvent, suggestGuide } = useGuide()
+watch(visible, (selected) => { if (selected) guideEvent('text-selected') })
 
 const showToc = ref(false)
 const showNotes = ref(false)
@@ -279,6 +282,7 @@ function onHtmlSelection(sel: HtmlReaderSelection | null, crossBlock: boolean) {
   }
   htmlSel.value = sel
   htmlSelVisible.value = sel !== null
+  if (sel) guideEvent('text-selected')
 }
 
 function onHtmlScroll(info: ScrollInfo) {
@@ -442,6 +446,7 @@ function onHtmlOpenComposer() {
   }
   htmlSel.value = null
   htmlSelVisible.value = false
+  guideEvent('composer-opened')
 }
 
 const html = useHtmlReader(htmlFrameEl, {
@@ -500,6 +505,7 @@ const litNoticeText = computed(
 )
 
 function onIncenseIgnited() {
+  suggestGuide('clock')
   showLitNotice.value = true
   if (litNoticeTimer) clearTimeout(litNoticeTimer)
   litNoticeTimer = setTimeout(() => {
@@ -648,6 +654,7 @@ async function loadDocument() {
   }
   await notesStore.load(relPath)
   await nextTick()
+  if (!notesStore.notes.length && !route.query.note) suggestGuide('note')
   const linkedNoteId = typeof route.query.note === 'string' ? route.query.note : ''
   if (linkedNoteId && notesStore.notes.some((note) => note.id === linkedNoteId)) {
     showNotes.value = true
@@ -773,6 +780,7 @@ function onOpenComposer() {
     anchor: cap.anchor,
   }
   dismiss()
+  guideEvent('composer-opened')
 }
 
 function onEditNote(id: string) {
@@ -794,6 +802,10 @@ function onNewFreeNote() {
     title: COPY.newInsight,
     noteId: null,
     anchor: null,
+  }
+  if (activeGuide.value === 'note') {
+    guideEvent('text-selected')
+    guideEvent('composer-opened')
   }
 }
 
@@ -817,6 +829,8 @@ async function onSaveNote(text: string) {
     }
     notify(COPY.noteSaved)
     composer.value = null
+    if (activeGuide.value === 'note') showNotes.value = true
+    guideEvent('note-saved')
   } catch {
     // 留住弹层与已输入的内容，让用户知道没存上。
     notify(COPY.opFailed, 'sandal')
@@ -1109,6 +1123,7 @@ watch(() => route.params.path, loadDocument)
         <div class="flex min-w-0 items-center gap-1">
           <IncenseControl
             v-if="settings.reminder.enabled"
+            data-guide="clock-button"
             variant="toolbar"
             @ignite="onIncenseIgnited"
           />
@@ -1184,11 +1199,13 @@ watch(() => route.params.path, loadDocument)
               </button>
               <button class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="openPanel('reading'); showReadingTools = false"><ZIcon name="settings" :size="16" />更多排版设置</button>
               <button class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="showShortcuts = true; showReadingTools = false"><ZIcon name="keyboard" :size="16" />{{ COPY.shortcutSheet }}</button>
+              <button class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="helpOpen = true; showReadingTools = false"><ZIcon name="about" :size="16" />使用指引</button>
               <button class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink" @click="toggleFullscreen(); showReadingTools = false"><ZIcon :name="isFullscreen ? 'shrink' : 'expand'" :size="16" />{{ isFullscreen ? COPY.exitFullscreen : COPY.fullscreen }}</button>
             </div>
           </div>
   
         <button
+          data-guide="zen-button"
           class="flex h-9 items-center gap-1.5 rounded-full bg-bamboo/15 px-3 text-sm text-bamboo transition-colors hover:bg-bamboo/25"
           :title="`${COPY.zenMode} · Z`"
           :aria-label="`${COPY.zenMode} · Z`"
@@ -1241,7 +1258,7 @@ watch(() => route.params.path, loadDocument)
       </Transition>
 
       <!-- Reading surface -->
-      <div ref="containerRef" class="min-w-0 flex-1 overflow-y-auto">
+      <div ref="containerRef" data-guide="reader-text" class="min-w-0 flex-1 overflow-y-auto">
         <!-- HTML 原样式直读：沙箱 iframe 撑满阅读区、自带滚动（md 用下面 prose 区）。
              sandbox 仅 allow-scripts → 不透明源；sandbox 不含 allow-same-origin，
              文档自身 JS 永远够不到应用源 / Tauri IPC。 -->
@@ -1281,6 +1298,7 @@ watch(() => route.params.path, loadDocument)
       <Transition name="fade-slide">
         <aside
           v-if="showNotes && (!settings.zenMode || ritualStage < 2)"
+          data-guide="notes-panel"
           class="w-80 shrink-0 border-l border-line"
           :class="isHtml && !headerHidden ? 'mt-14' : ''"
         >
@@ -1369,7 +1387,7 @@ watch(() => route.params.path, loadDocument)
       :open="deleteTarget !== null"
       :title="COPY.deleteNote"
       :message="COPY.deleteNoteHint"
-      :confirm-label="COPY.delete"
+      confirm-label="确认删除"
       @confirm="onConfirmDelete"
       @close="deleteTarget = null"
     />
