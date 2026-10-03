@@ -68,6 +68,19 @@ export interface ApplyAnchorsPayload {
   items: { noteId: string; anchor: HighlightAnchor }[]
 }
 
+/** Remove Vue proxies before crossing the iframe postMessage boundary. */
+export function plainAnchorItems(items: ApplyAnchorsPayload['items']): ApplyAnchorsPayload['items'] {
+  return items.map(({ noteId, anchor }) => ({
+    noteId,
+    anchor: {
+      quote: anchor.quote,
+      prefix: anchor.prefix,
+      suffix: anchor.suffix,
+      occurrence: anchor.occurrence,
+    },
+  }))
+}
+
 export interface ScrollInfo {
   /** 0..1 的阅读进度（宿主持久化，与 md 同一套）。 */
   ratio: number

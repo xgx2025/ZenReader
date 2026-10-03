@@ -4,6 +4,7 @@ import type { Document } from '@/types/document'
 import {
   PROTOCOL_VERSION,
   isFrameEvent,
+  plainAnchorItems,
   type AgentConfig,
   type ApplyAnchorsPayload,
   type FrameRect,
@@ -87,7 +88,7 @@ export function useHtmlReader(
   }
 
   function applyAnchors(items: { noteId: string; anchor: HighlightAnchor }[]) {
-    send('cmd.applyAnchors', { items } satisfies ApplyAnchorsPayload)
+    send('cmd.applyAnchors', { items: plainAnchorItems(items) } satisfies ApplyAnchorsPayload)
   }
 
   function scrollToRatio(ratio: number) {

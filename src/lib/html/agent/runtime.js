@@ -154,9 +154,9 @@
   // ---------- 2. 划词捕获（移植自应用 textAnchor.ts 的规则） ----------
   var CONTEXT_LENGTH = 100
 
-  function nodeIndexOf(node, offsets, nodes) {
+  function nodeIndexOf(node, offset, offsets, nodes) {
     for (var i = 0; i < nodes.length; i++) {
-      if (nodes[i] === node) return offsets[i]
+      if (nodes[i] === node) return offsets[i] + offset
     }
     return null
   }
@@ -182,8 +182,8 @@
     var nodes = visibleTextNodes()
     var offsets = textOffsets(nodes)
     var text = fullText()
-    var start = nodeIndexOf(range.startContainer, offsets, nodes)
-    var end = nodeIndexOf(range.endContainer, offsets, nodes)
+    var start = nodeIndexOf(range.startContainer, range.startOffset, offsets, nodes)
+    var end = nodeIndexOf(range.endContainer, range.endOffset, offsets, nodes)
     if (start === null || end === null || start === end) return null
     var lo = Math.min(start, end)
     var hi = Math.max(start, end)

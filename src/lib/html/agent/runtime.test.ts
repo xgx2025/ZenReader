@@ -31,6 +31,7 @@ function loadAgent(html: string) {
         jumpToFragment: (href: string) => void
         scrollInfo: () => { ratio: number; activeIndex: number }
         outlinePayload: () => { level: number; text: string }[]
+        captureSelection: () => { anchor: { quote: string; prefix: string; suffix: string; occurrence: number } } | null
       }
       NodeFilter: typeof NodeFilter
     }
@@ -65,6 +66,19 @@ function click(w: Win, el: Element) {
 const DOC = '<body><h1>卷首</h1><p>第一句 正文。</p><p>第二句 正文。</p><script>bad()</script></body>'
 
 describe('html/agent · 帧内逻辑（headless）', () => {
+  it('同一文本节点内划词时保留起止字符偏移', () => {
+    const { dom, api } = loadAgent('<body><p>Selection gesture works.</p></body>')
+    const node = dom.window.document.querySelector('p')!.firstChild!
+    const range = dom.window.document.createRange()
+    range.setStart(node, 1)
+    range.setEnd(node, 10)
+    range.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 20 }) as DOMRect
+    dom.window.getSelection()!.removeAllRanges()
+    dom.window.getSelection()!.addRange(range)
+
+    expect(api.captureSelection()?.anchor).toMatchObject({ quote: 'election ', prefix: 'S' })
+  })
+
   it('outline 扫出正文标题、忽略 script 内容', () => {
     const { api } = loadAgent(DOC)
     expect(api.outlinePayload()).toEqual([{ level: 1, text: '卷首' }])
