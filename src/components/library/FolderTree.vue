@@ -2,6 +2,7 @@
 import { nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 
 import ZIcon from '@/components/common/ZIcon.vue'
+import FolderCreateForm from '@/components/library/FolderCreateForm.vue'
 import { COPY } from '@/lib/copy'
 import type { FolderRow } from '@/lib/folderTree'
 
@@ -38,6 +39,10 @@ const props = defineProps<{
   dragOver?: { path: string; mode: 'before' | 'after' | 'inside' }
   /** 上一次手势是拖动：行名与折页的点击要吞掉（否则拖完顺手选中了别处）。 */
   swallowClick?: boolean
+  creatingParent?: string
+  createName?: string
+  createError?: string
+  createSaving?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -60,6 +65,9 @@ const emit = defineEmits<{
   renameCancel: []
   /** 分组拖动：指针按在某行上（拿起与否由外层的阈值决定）。 */
   rowPointerDown: [path: string, ev: PointerEvent]
+  createInput: [name: string]
+  createSubmit: []
+  createCancel: []
 }>()
 
 const renameInputEl = ref<HTMLInputElement | null>(null)
@@ -159,7 +167,7 @@ function isSelected(row: FolderRow): boolean {
 }
 
 function isOpen(row: FolderRow): boolean {
-  return props.expanded[row.node.path] !== false
+  return props.expanded[row.node.path] === true
 }
 
 /**
@@ -216,7 +224,8 @@ function resolveDropFromPoint(clientY: number): string | null {
   for (const li of list) {
     const path = li.dataset.folderRow
     if (!path) continue
-    const r = li.getBoundingClientRect()
+    const line = li.querySelector('.folder-line')?.getBoundingClientRect()
+    const r = line?.height ? line : li.getBoundingClientRect()
     const distance = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0
     // 行距只有 1px：缝隙里也认最近的那一行，否则遮罩文案会闪一下空
     if (!nearest || distance < nearest.distance) nearest = { path, distance }
@@ -368,9 +377,8 @@ function onTreeDrop(ev: DragEvent) {
                 >/{{ allCount(row) }}</span>
               </span>
 
-              <!-- 非空：⋯ 唤菜单（释怀在菜单里置灰并写明缘由） -->
+              <!-- 每个分组都从同一个菜单新建子分组、改名或删除。 -->
               <button
-                v-if="row.node.count > 0"
                 type="button"
                 tabindex="-1"
                 class="folder-action absolute inset-y-0 right-0 flex w-[1.875rem] items-center justify-end rounded text-dusk opacity-0 transition-opacity duration-200 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
@@ -380,21 +388,20 @@ function onTreeDrop(ev: DragEvent) {
               >
                 <ZIcon name="more" :size="14" />
               </button>
-              <!-- 空分组：唯一可做的事就是释怀，直接露出（不必再进一层菜单） -->
-              <button
-                v-else
-                type="button"
-                tabindex="-1"
-                class="folder-action absolute inset-y-0 right-0 flex w-[1.875rem] items-center justify-end rounded text-dusk opacity-0 transition-opacity duration-200 hover:text-sandal focus-visible:opacity-100 group-hover:opacity-100"
-                :title="COPY.removeFolder"
-                :aria-label="COPY.removeFolder"
-                @click.stop="onActionClick(() => emit('remove', row.node.path))"
-              >
-                <ZIcon name="delete" :size="14" />
-              </button>
             </span>
           </button>
         </div>
+        <FolderCreateForm
+          v-if="creatingParent === row.node.path"
+          :parent-label="row.node.name"
+          :name="createName ?? ''"
+          :error="createError ?? ''"
+          :saving="createSaving ?? false"
+          :style="{ marginLeft: `${2.75 + (row.depth + 1) * 1}rem` }"
+          @input="emit('createInput', $event)"
+          @submit="emit('createSubmit')"
+          @cancel="emit('createCancel')"
+        />
       </li>
     </TransitionGroup>
   </div>

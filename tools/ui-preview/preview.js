@@ -72,8 +72,7 @@
    * 数据刻意混了长短名字、空分组、深一层子分组与两种卷式，好把侧栏的截断、
    * 0 卷降档、缩进、双计数一次照亮。
    *
-   * **可变**：rename_dir / notes_rename_folder 会真的改这份表，于是改名、拖动排序、
-   * 拖拽移动都能在预览里看到落盘之后的样子（否则刷新一次就复原，等于没验）。
+   * **可变**：create_dir / rename_dir 会真的改这份表，创建与移动后刷新仍能看到落点。
    */
   var folders = [
     ['agent', 4, []],
@@ -247,6 +246,16 @@
           return Promise.resolve([])
         case 'notes_list_all':
           return Promise.resolve(demoNotes)
+        case 'create_dir': {
+          var root = String(settings.vaultPath).replace(/\\/g, '/').replace(/\/$/, '') + '/'
+          var target = String((args || {}).path || '').replace(/\\/g, '/')
+          var relative = target.indexOf(root) === 0 ? target.slice(root.length) : ''
+          if (!relative || folders.some(function (f) { return f[0] === relative })) {
+            return Promise.reject(new Error('invalid or existing directory'))
+          }
+          folders.push([relative, 0, []])
+          return Promise.resolve(null)
+        }
         case 'knowledge_load':
           return Promise.resolve(JSON.stringify(demoKnowledge))
         case 'knowledge_save':

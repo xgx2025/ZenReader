@@ -88,7 +88,9 @@ export function useFolderDrag(opts: FolderDragOptions): {
     for (const li of el.querySelectorAll<HTMLElement>('.folder-row')) {
       const path = li.dataset.folderRow
       if (!path) continue
-      const r = li.getBoundingClientRect()
+      // 新建子分组的表单也挂在 li 内；落点只按真正的分组行计算。
+      const line = li.querySelector('.folder-line')?.getBoundingClientRect()
+      const r = line?.height ? line : li.getBoundingClientRect()
       out.push({ path, expandable: expandable.get(path) ?? false, top: r.top, bottom: r.bottom })
     }
     return out

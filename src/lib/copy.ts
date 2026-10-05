@@ -151,6 +151,8 @@ export const COPY = {
   removeDoc: '删除本地文件',
   removeDocHint: '将删除书库目录中的此文件，并清除相关觉悟笔记与阅读进度。此操作不可撤销。',
   newFolder: '新建分组',
+  newChildFolder: '新建子分组',
+  create: '创建',
   folderName: '分组名',
   /** 改名：菜单项、行内输入框的可访问名、以及各类失败的缘由。 */
   renameFolder: '重命名',
@@ -170,9 +172,9 @@ export const COPY = {
   /** 侧栏宽度：手柄的可访问名与悬停提示。 */
   sidebarWidth: '侧栏宽度',
   sidebarWidthHint: '拖动调整侧栏宽度，双击复位',
-  /** 新建分组的落点说明：父级由当前选中分组暗定，必须写出来。 */
-  newFolderUnder: '将在',
-  newFolderUnderRoot: '书库根下',
+  /** 新建分组的落点说明：入口明确指定顶层或父分组。 */
+  newFolderUnder: '创建位置：',
+  newFolderUnderRoot: '书库（顶层）',
   /** 非法分组名的缘由。按钮不禁用——禁用不解释「为什么点不动」。 */
   folderNameInvalid: '分组名不能包含 / 或 \\',
   folderNameEmpty: '请先写下分组名',

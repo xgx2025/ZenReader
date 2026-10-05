@@ -7,6 +7,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import DocumentCard from '@/components/library/DocumentCard.vue'
 import FolderTree from '@/components/library/FolderTree.vue'
+import FolderCreateForm from '@/components/library/FolderCreateForm.vue'
 import MoveDialog from '@/components/library/MoveDialog.vue'
 
 import { useLibraryStore } from '@/stores/library'
@@ -603,37 +604,42 @@ async function onConfirmRemove() {
 }
 
 const creating = ref(false)
+const createParent = ref('')
 const newFolderName = ref('')
-const newFolderInput = ref<HTMLInputElement | null>(null)
-/** 非法名的缘由。按钮**不禁用**——禁用只让人怀疑按钮坏了，说不出为什么。 */
+const createSaving = ref(false)
 const newFolderError = ref('')
 
 /**
- * 新建分组的落点由当前选中分组暗定（store 侧也是这么建的），所以必须写在输入框
- * 上方：刚点开某个分组再点「新建分组」的人，十有八九以为自己在建顶层。
+ * 顶部入口总是顶层；行菜单总是在该行下面建子分组。落点由点击的入口决定，
+ * 不随当前选中内容暗变。
  */
 const newFolderParentLabel = computed(() => {
-  if (!library.selectedFolder) return COPY.newFolderUnderRoot
-  return `${COPY.library} / ${library.selectedFolder.split('/').join(' / ')}`
+  if (!createParent.value) return COPY.newFolderUnderRoot
+  return `${COPY.library} / ${createParent.value.split('/').join(' / ')}`
 })
 
-function startCreating() {
+function startCreating(parent = '') {
+  if (createSaving.value) return
+  closeFolderMenu()
+  createParent.value = parent
+  if (parent) reveal(parent)
   creating.value = true
   suggestGuide('folder-create')
   newFolderName.value = ''
   newFolderError.value = ''
-  nextTick(() => newFolderInput.value?.focus())
 }
 
 function cancelCreating() {
   if (activeGuide.value === 'folder-create') finishGuide(true)
   creating.value = false
+  createParent.value = ''
   newFolderName.value = ''
   newFolderError.value = ''
 }
 
 /** 有错则即时清掉：用户已经在改了，再摆着红字就是唠叨。 */
-function onFolderNameInput() {
+function onFolderNameInput(value: string) {
+  newFolderName.value = value
   if (newFolderError.value) newFolderError.value = ''
 }
 
@@ -647,29 +653,33 @@ function validateFolderName(): boolean {
     newFolderError.value = COPY.folderNameInvalid
     return false
   }
+  if (folderNameTaken(allFolderPaths.value, createParent.value, n)) {
+    newFolderError.value = COPY.renameConflict
+    return false
+  }
   newFolderError.value = ''
   return true
 }
 
-/** 输入框为空时按钮置灰（省一次无谓点击），有内容则可点、由校验给缘由。 */
-function canCreate() {
-  return newFolderName.value.trim().length > 0
-}
-
 async function submitFolder() {
-  if (!validateFolderName()) {
-    newFolderInput.value?.focus()
-    return
-  }
+  if (createSaving.value || !validateFolderName()) return
+  const parent = createParent.value
+  const path = parent ? `${parent}/${newFolderName.value.trim()}` : newFolderName.value.trim()
+  createSaving.value = true
   try {
-    await library.createFolder(newFolderName.value.trim())
+    await library.createFolderAt(path)
+    reveal(path)
+    selectFolder(path)
     notify(COPY.folderCreated)
     guideEvent('folder-created')
   } catch {
     notify(COPY.opFailed, 'sandal')
     return
+  } finally {
+    createSaving.value = false
   }
   cancelCreating()
+  nextTick(() => focusRow(path))
 }
 
 // 拖拽引卷：拖入即浮起「松手引卷入藏」，落点按当前选中分组导入。
@@ -1071,53 +1081,28 @@ onBeforeUnmount(() => {
               </h2>
 
               <button
-                v-if="!creating"
                 type="button"
                 class="side-head-action"
-                :title="COPY.newFolder"
-                :aria-label="COPY.newFolder"
-                @click="startCreating"
+                :disabled="createSaving"
+                :title="`${COPY.newFolder}（顶层）`"
+                :aria-label="`${COPY.newFolder}（顶层）`"
+                @click="startCreating('')"
               >
                 <ZIcon name="plus" :size="15" :stroke-width="1.4" />
+                <span>新建</span>
               </button>
             </div>
 
-          <div v-if="creating" data-guide="folder-create" class="side-form">
-            <!-- 落点由当前选中分组暗定；不说出来就一定会有人建错层 -->
-            <p class="text-[11px] leading-snug text-ink-soft/85">
-              {{ COPY.newFolderUnder }}
-              <span class="text-ink-soft">{{ newFolderParentLabel }}</span>
-            </p>
-            <input
-              ref="newFolderInput"
-              v-model="newFolderName"
-              :placeholder="COPY.folderName"
-              :aria-invalid="!!newFolderError"
-              class="w-full rounded-lg bg-paper-deep/60 px-2.5 py-1.5 text-sm text-ink caret-bamboo outline-none placeholder:text-dusk transition-colors focus:bg-paper-deep"
-              @keydown.enter="submitFolder"
-              @keydown.esc="cancelCreating"
-              @input="onFolderNameInput"
-            />
-            <!-- 非法名说清缘由：按钮不禁用——禁用不解释「为什么点不动」 -->
-            <p v-if="newFolderError" class="text-[11px] text-sandal">
-              {{ newFolderError }}
-            </p>
-            <div class="flex gap-1.5">
-              <button
-                class="side-form-btn bg-bamboo text-paper hover:opacity-90 disabled:opacity-40"
-                :disabled="!canCreate()"
-                @click="submitFolder"
-              >
-                {{ COPY.save }}
-              </button>
-              <button
-                class="side-form-btn text-ink-soft hover:bg-bamboo/10 hover:text-ink"
-                @click="cancelCreating"
-              >
-                {{ COPY.cancel }}
-              </button>
-            </div>
-          </div>
+          <FolderCreateForm
+            v-if="creating && !createParent"
+            :parent-label="newFolderParentLabel"
+            :name="newFolderName"
+            :error="newFolderError"
+            :saving="createSaving"
+            @input="onFolderNameInput"
+            @submit="submitFolder"
+            @cancel="cancelCreating"
+          />
 
           <!-- 判据是**可见行**而不是树里有没有分组：全收之后树仍在（13 个分组一条不少），
                只是行序列空了——用 `library.folderTree.length` 会把「收起来了」当成
@@ -1137,6 +1122,10 @@ onBeforeUnmount(() => {
             :dragging-folder="folderDrag?.path ?? ''"
             :drag-over="folderDragOver ?? undefined"
             :swallow-click="swallowRowClick()"
+            :creating-parent="creating ? createParent : ''"
+            :create-name="newFolderName"
+            :create-error="newFolderError"
+            :create-saving="createSaving"
             @select="onFolderSelect"
             @toggle="onFolderToggle"
             @menu="openFolderMenu"
@@ -1149,6 +1138,9 @@ onBeforeUnmount(() => {
             @rename-commit="commitRename"
             @rename-cancel="cancelRename"
             @row-pointer-down="onRowPointerDown"
+            @create-input="onFolderNameInput"
+            @create-submit="submitFolder"
+            @create-cancel="cancelCreating"
           />
           <!-- 空着的这一区有两种缘由，不能混为一句话：
                · 全收之后没有可见行——「尚无分组 · 点 ＋ 建一个」就是撒谎（库里有分组），
@@ -1466,7 +1458,14 @@ onBeforeUnmount(() => {
       :y="folderMenu.y"
       @close="closeFolderMenu"
     >
-      <!-- 重命名：分组名与路径都是本地操作，是这一区里最常用的一项，故排在最前。 -->
+      <button
+        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
+        @click="startCreating(folderMenu.path)"
+      >
+        <ZIcon name="plus" :size="15" class="shrink-0 text-bamboo" />
+        {{ COPY.newChildFolder }}
+      </button>
+      <!-- 重命名与创建子分组都在当前分组的操作菜单中。 -->
       <button
         class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink-soft transition-colors hover:bg-bamboo/10 hover:text-ink"
         @click="startRename(folderMenu.path)"

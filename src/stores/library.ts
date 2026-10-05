@@ -297,17 +297,9 @@ export const useLibraryStore = defineStore('library', () => {
     saveArrangeSoon()
   }
 
-  /** Create a real directory (分组) inside the vault, then rescan. */
-  async function createFolder(name: string) {
-    const clean = name.trim()
-    if (!clean || clean.includes('/') || clean.includes('\\')) return
-    const parent = selectedFolder.value
-    return createFolderAt(parent ? `${parent}/${clean}` : clean)
-  }
-
   /**
-   * 按**相对路径**建目录（取消选中无关的中间层）。新建分组的落点是当前选中分组，
-   * 「撤销释怀」也要把分组放回原位——两处都只认路径，故不必先改选中态。
+   * 按**相对路径**建目录。创建入口明确传入顶层或父级路径；「撤销释怀」
+   * 也要把分组放回原位——两处都只认路径，不借当前选中态猜落点。
    */
   async function createFolderAt(relativePath: string) {
     const clean = relativePath.replace(/^\/+|\/+$/g, '')
@@ -469,7 +461,6 @@ export const useLibraryStore = defineStore('library', () => {
     flushArrange,
     refresh,
     openVault,
-    createFolder,
     createFolderAt,
     removeFolder,
     renameFolder,

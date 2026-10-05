@@ -32,7 +32,7 @@ export const GUIDES: Record<GuideId, { title: string; steps: GuideStep[] }> = {
     { route: '/read', target: '[data-guide="notes-panel"]', title: '以后在这里找回', body: '上方「觉悟」可找回、编辑这篇文章的笔记，也能把笔记归入知识图。', nextLabel: '完成' },
   ] },
   'folder-create': { title: '新建分组', steps: [
-    { route: '/', target: '[data-guide="folder-create"]', title: '看清新分组的位置', body: '新分组会建在当前选中的分组下。若想建顶层，请先点侧栏「书库」。填入名称后点「存」。', event: 'folder-created' },
+    { route: '/', target: '[data-guide="folder-create"]', title: '看清新分组的位置', body: '点「分组」旁的新建可建顶层；要建子分组，打开那个分组的「⋯」并选「新建子分组」。确认创建位置，填入名称后点「创建」。', event: 'folder-created' },
   ] },
   'folder-scope': { title: '浏览分组', steps: [
     { route: '/', target: '[data-guide="folder-scope"]', title: '分组只显示本层文章', body: '右侧是当前分组本层的文章；子分组中的文章仍在左侧。可点面包屑或侧栏「书库」返回。', nextLabel: '明白了' },

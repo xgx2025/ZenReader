@@ -149,13 +149,14 @@ describe('FolderTree · 选中与展开是两件事', () => {
 })
 
 describe('FolderTree · 行上的可见操作', () => {
-  it('空分组露出「释怀」，点的就是它', () => {
+  it('空分组也有操作菜单，以便新建子分组', () => {
     const emitted = mountTree(treeOf([], ['空的']))
 
     action('空的').click()
 
-    expect(emitted.remove).toEqual(['空的'])
-    expect(emitted.menu).toEqual([])
+    expect(emitted.menu.map((m) => m.path)).toEqual(['空的'])
+    expect(emitted.menu[0].count).toBe(0)
+    expect(emitted.remove).toEqual([])
   })
 
   it('非空分组的行操作是「⋯」（唤菜单），且带上子树计数', () => {

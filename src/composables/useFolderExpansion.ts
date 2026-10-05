@@ -11,8 +11,8 @@ import { useSettingsStore } from '@/stores/settings'
  * 选中就永远收不起任何子树，而点一下已选中的分组又会静默丢掉位置。现在点击行名只
  * 负责选中（取消只由「书库」行与面包屑承担），左边的折页只负责开合。
  *
- * 持久化按书库根路径分键：换库不互相污染，重开应用回到上次的开合形状。缺失键一律
- * 视为**展开**（默认看得见内容），只有显式 false 才算收起。
+ * 持久化按书库根路径分键：换库不互相污染，重开应用回到上次的开合形状。
+ * 子分组缺失展开记录时默认收起；书库根默认展开。
  */
 
 /** localStorage 前缀。换键名即放弃旧记录，不做迁移。 */
@@ -87,9 +87,9 @@ export function useFolderExpansion(): {
   // 换库即换记录；watch 而非 computed——载入是一次性副作用，不是派生值。
   watch(() => settings.vaultPath, bindVault)
 
-  /** 缺失即展开——只有显式 false 才是收起。 */
+  /** 子分组缺失记录即收起，与 flattenVisibleRows 的默认行为一致。 */
   function isExpanded(path: string): boolean {
-    return expanded.value[path] !== false
+    return expanded.value[path] === true
   }
 
   function toggle(path: string): void {
@@ -100,7 +100,7 @@ export function useFolderExpansion(): {
   /** 展开祖先链（不含自身）。折叠着的高亮不可见，选中后必须让它显形。 */
   function reveal(path: string): void {
     for (const a of folderAncestors(path)) {
-      if (expanded.value[a] === false) setKey(a, true)
+      if (expanded.value[a] !== true) setKey(a, true)
     }
   }
 
