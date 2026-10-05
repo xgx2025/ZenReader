@@ -204,8 +204,20 @@
   font-size: 0.85em;
   line-height: 1.65;
 }
+/* Shiki separates block-level .line spans with literal newlines. Under the
+   inherited `white-space: pre`, those separators become extra empty rows.
+   Collapse only the separators; each line keeps its own indentation. */
+.zen-prose pre code.shiki {
+  white-space: normal;
+}
 .zen-prose pre code .line {
   display: block;
+  white-space: pre;
+}
+/* Empty source lines have no text to give their block height. Keep those
+   rows, while letting Shiki's final empty sentinel collapse. */
+.zen-prose pre code .line:not(:last-child) {
+  min-height: 1lh;
 }
 /* 代码块「语言」：左上角常驻小签，与右上复制按钮同款浮签；
    有签的块把顶部内边距垫高，标签不压首行代码。无语言标注的裸块不带签。 */
