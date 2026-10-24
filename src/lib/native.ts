@@ -38,6 +38,14 @@ export const nativeFs = {
     return invoke<string>('read_file', { path })
   },
 
+  pdfFileSize(dir: string, relativePath: string): Promise<number> {
+    return invoke<number>('pdf_file_size', { dir, relativePath })
+  },
+
+  readPdfRange(dir: string, relativePath: string, begin: number, end: number): Promise<string> {
+    return invoke<string>('read_pdf_range', { dir, relativePath, begin, end })
+  },
+
   /** Read an HTML file, decoding by BOM / `<meta charset>` (GBK 存档页兼容). */
   readHtml(path: string): Promise<string> {
     return invoke<string>('read_html', { path })
@@ -60,6 +68,10 @@ export const nativeFs = {
   /** Write raw bytes from a browser File (base64) — HTML 内存字节落盘. */
   writeBase64(path: string, data: string): Promise<void> {
     return invoke('write_base64', { path, data })
+  },
+
+  writeBase64Chunk(path: string, data: string, append: boolean): Promise<void> {
+    return invoke('write_base64_chunk', { path, data, append })
   },
 
   deleteFile(path: string): Promise<void> {

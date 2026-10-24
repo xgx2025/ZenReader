@@ -15,7 +15,7 @@ export default defineConfig({
       // 文件工具用「临时文件 + 改名」落盘，临时目录带锁；watcher 盯上它就会
       // EBUSY 把整个 dev server 带走（实测：改一次样式就崩）。目录与其内部
       // 文件都要挡：watcher 递归下去照样会碰到那把锁。
-      ignored: ['**/src-tauri/**', '**/*.tmpdir', '**/*.tmpdir/**'],
+      ignored: ['**/src-tauri/**', '**/tmp/**', '**/public/pdfjs-assets/**', '**/*.tmpdir', '**/*.tmpdir/**'],
     },
   },
   resolve: {

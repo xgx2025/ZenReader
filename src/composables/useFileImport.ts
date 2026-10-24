@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 
 import { nativeFs } from '@/lib/native'
-import { joinPath, vaultFile, folderPathFromRelative, DOC_EXT, isHtmlFile } from '@/lib/vault'
+import { joinPath, vaultFile, folderPathFromRelative, DOC_EXT, isHtmlFile, isPdfFile } from '@/lib/vault'
 import { COPY } from '@/lib/copy'
 import { useSettingsStore } from '@/stores/settings'
 import { useLibraryStore } from '@/stores/library'
@@ -35,6 +35,23 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
     bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
   }
   return btoa(bin)
+}
+
+async function writePdfFile(file: File, dest: string): Promise<void> {
+  const CHUNK_BYTES = 1024 * 1024
+  try {
+    if (file.size === 0) {
+      await nativeFs.writeBase64Chunk(dest, '', false)
+      return
+    }
+    for (let offset = 0; offset < file.size; offset += CHUNK_BYTES) {
+      const data = arrayBufferToBase64(await file.slice(offset, offset + CHUNK_BYTES).arrayBuffer())
+      await nativeFs.writeBase64Chunk(dest, data, offset > 0)
+    }
+  } catch (error) {
+    await nativeFs.deleteFile(dest).catch(() => {})
+    throw error
+  }
 }
 
 /** Relative target within the vault: folder-picked files keep their structure. */
@@ -132,7 +149,9 @@ export function useFileImport() {
         folderPath: folderPathFromRelative(relPath),
         relPath,
         // .md 沿用文本路径；.html 按原始字节 base64 落盘。
-        write: isHtmlFile(file.name)
+        write: isPdfFile(file.name)
+          ? async (dest: string) => writePdfFile(file, dest)
+          : isHtmlFile(file.name)
           ? async (dest: string) =>
               nativeFs.writeBase64(dest, arrayBufferToBase64(await file.arrayBuffer()))
           : async (dest: string) => nativeFs.writeFile(dest, await readFileAsText(file)),
@@ -168,7 +187,7 @@ export function useFileImport() {
             write: async (dest: string) =>
               nativeFs.writeFile(dest, await nativeFs.readFile(clean)),
           })
-        } else if (isHtmlFile(name)) {
+        } else if (isHtmlFile(name) || isPdfFile(name)) {
           // 单个 .html 落点按文件导入——绝不能当文件夹递归 readVault（会把本文件当根，
           // 得出空 relativePath 而误写）。原样字节拷贝进书库。
           const relPath = joinPath(targetFolder, name)
@@ -191,7 +210,7 @@ export function useFileImport() {
               fileName: f.name,
               folderPath: folderPathFromRelative(relPath),
               relPath,
-              write: isHtmlFile(f.name)
+              write: isHtmlFile(f.name) || isPdfFile(f.name)
                 ? async (dest: string) => nativeFs.copyFile(f.path, dest)
                 : async (dest: string) =>
                     nativeFs.writeFile(dest, await nativeFs.readFile(f.path)),

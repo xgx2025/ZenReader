@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import ZIcon from '@/components/common/ZIcon.vue'
-import { folderPathFromRelative, isHtmlFile, titleFromName } from '@/lib/vault'
+import { folderPathFromRelative, docFormatOf, readerPath, titleFromName } from '@/lib/vault'
 import { COPY } from '@/lib/copy'
 import { useProgressStore } from '@/stores/progress'
 import { FINISHED_RATIO, RESUME_MIN_RATIO } from '@/types/progress'
@@ -42,12 +42,12 @@ const title = computed(() => props.meta?.title ?? titleFromName(props.file.name)
 const folderPath = computed(() => folderPathFromRelative(props.file.relativePath))
 
 /** 卡片形制对两类卷一视同仁，只在页脚缀一枚格式小签：竹青为 md，檀棕为 html。 */
-const isHtml = computed(() => isHtmlFile(props.file.name))
+const format = computed(() => docFormatOf(props.file.name))
 const formatExt = computed(() =>
-  isHtml.value ? COPY.formatExtHtml : COPY.formatExtMarkdown,
+  format.value === 'pdf' ? COPY.formatExtPdf : format.value === 'html' ? COPY.formatExtHtml : COPY.formatExtMarkdown,
 )
 const formatHint = computed(() =>
-  isHtml.value ? COPY.formatHtmlHint : COPY.formatMdHint,
+  format.value === 'pdf' ? COPY.formatPdfHint : format.value === 'html' ? COPY.formatHtmlHint : COPY.formatMdHint,
 )
 
 const mtime = computed(() => {
@@ -95,7 +95,7 @@ const pickable = computed(() => props.arrange && !props.slot && !props.clone)
 const surface = computed(() => (arranging.value ? 'div' : RouterLink))
 /** 仅在普通态给 RouterLink 路由。 */
 const linkTo = computed(() =>
-  arranging.value ? undefined : `/read/${encodeURIComponent(props.file.relativePath)}`,
+  arranging.value ? undefined : readerPath(props.file.relativePath),
 )
 
 /**
@@ -205,7 +205,7 @@ const isNewBadge = computed(
 
         <div class="flex items-center gap-2.5 text-xs text-dusk" :class="reading ? 'mt-2' : ''">
           <span v-if="folderPath" class="truncate">{{ folderPath }}</span>
-          <template v-if="meta">
+          <template v-if="meta && format !== 'pdf'">
             <span>{{ meta.wordCount }} {{ COPY.words }}</span>
             <span>{{ meta.readingTime }} {{ COPY.minutes }}</span>
           </template>
@@ -214,9 +214,11 @@ const isNewBadge = computed(
           <span
             class="shrink-0 rounded-[5px] border px-1.5 py-px font-mono text-[10px] leading-3"
             :class="
-              isHtml
+              format === 'html'
                 ? 'border-sandal/30 bg-sandal/12 text-sandal'
-                : 'border-bamboo/25 bg-bamboo/10 text-bamboo'
+                : format === 'pdf'
+                  ? 'border-dusk/30 bg-dusk/10 text-ink-soft'
+                  : 'border-bamboo/25 bg-bamboo/10 text-bamboo'
             "
             :title="formatHint"
           >

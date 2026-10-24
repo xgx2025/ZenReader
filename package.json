@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node tools/copy-pdf-assets.mjs",
     "dev": "vite",
+    "prebuild": "node tools/copy-pdf-assets.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
@@ -26,6 +28,7 @@
     "markdown-it-task-lists": "^2.1.1",
     "markdown-it-texmath": "^1.0.0",
     "mermaid": "^11.17.2",
+    "pdfjs-dist": "^6.3.289",
     "pinia": "^3.0.1",
     "shiki": "^1.29.1",
     "vue": "^3.5.13",

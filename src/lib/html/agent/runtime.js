@@ -91,7 +91,7 @@
 
   var NONCE = CFG.nonce || ''
   var EXCLUDED_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1, TITLE: 1, HEAD: 1 }
-  var DOC_EXT = /\.(md|markdown|html|htm)$/i
+  var DOC_EXT = /\.(md|markdown|html|htm|pdf)$/i
   var TOGGLE_KEYS = { t: 1, n: 1, z: 1, '?': 1, Escape: 1 }
   var NAV_KEYS = { ' ': 1, ArrowDown: 1, ArrowUp: 1, ArrowLeft: 1, ArrowRight: 1, Home: 1, End: 1, PageDown: 1, PageUp: 1, j: 1, k: 1 }
 

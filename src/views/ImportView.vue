@@ -211,7 +211,7 @@ const STATUS_CLASS: Record<string, string> = {
         <input
           ref="fileInput"
           type="file"
-          accept=".md,.markdown,.html,.htm,text/markdown,text/html"
+          accept=".md,.markdown,.html,.htm,.pdf,text/markdown,text/html,application/pdf"
           multiple
           class="hidden"
           @change="onFileChange"

@@ -45,7 +45,7 @@ import { useToast } from '@/composables/useToast'
 import { useGuide } from '@/composables/useGuide'
 import { COPY } from '@/lib/copy'
 import { isTauri, openExternal } from '@/lib/native'
-import { resolveDocLink } from '@/lib/vault'
+import { resolveDocLink, readerPath } from '@/lib/vault'
 import { playZenEnterChime } from '@/lib/chime'
 import ZenMotes from '@/components/reader/ZenMotes.vue'
 import {
@@ -330,7 +330,7 @@ function onHtmlZoom(z: number) {
 function onHtmlOpenDoc(href: string) {
   const base = route.params.path as string | undefined
   const resolved = base ? resolveDocLink(base, href) : null
-  if (resolved) void router.push(`/read/${encodeURIComponent(resolved)}`)
+  if (resolved) void router.push(readerPath(resolved))
 }
 
 function onHtmlOpenExternal(url: string) {
@@ -899,7 +899,7 @@ function onProseClick(e: MouseEvent) {
     : null
   if (resolved) {
     // 互链走应用内路由；目标缺失时由 loadDocument 的失败流提示并回书库。
-    void router.push(`/read/${encodeURIComponent(resolved)}`)
+    void router.push(readerPath(resolved))
   }
 }
 

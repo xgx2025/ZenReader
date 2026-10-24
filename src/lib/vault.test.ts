@@ -5,10 +5,12 @@ import {
   rewritePathPrefix,
   titleFromName,
   isHtmlFile,
+  isPdfFile,
   isDocFile,
   docFormatOf,
   resolveDocLink,
   resolveHtmlTitle,
+  readerPath,
 } from './vault'
 
 describe('vault · html 拓宽', () => {
@@ -26,6 +28,8 @@ describe('vault · html 拓宽', () => {
     expect(isDocFile('d.markdown')).toBe(true)
     expect(isDocFile('e.html')).toBe(true)
     expect(isDocFile('f.htm')).toBe(true)
+    expect(isPdfFile('g.PDF')).toBe(true)
+    expect(isDocFile('g.PDF')).toBe(true)
     expect(isDocFile('g.txt')).toBe(false)
   })
 
@@ -36,6 +40,7 @@ describe('vault · html 拓宽', () => {
     expect(docFormatOf('d.html')).toBe('html')
     expect(docFormatOf('e.htm')).toBe('html')
     expect(docFormatOf('f.HTML')).toBe('html')
+    expect(docFormatOf('g.PDF')).toBe('pdf')
   })
 
   it('docFormatOf 与 isDocFile 同域：非文档名不落进书库', () => {
@@ -54,6 +59,8 @@ describe('vault · html 拓宽', () => {
     // 非文档目标仍为 null
     expect(resolveDocLink('a.md', 'image.png')).toBeNull()
     expect(resolveDocLink('a.md', 'https://example.com/z.html')).toBeNull()
+    expect(resolveDocLink('a.md', '书.pdf')).toBe('书.pdf')
+    expect(readerPath('书.pdf')).toBe('/pdf/%E4%B9%A6.pdf')
   })
 
   it('通用文件名回退到 <title>，普通文件名用文件名', () => {

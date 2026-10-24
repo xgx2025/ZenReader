@@ -41,11 +41,11 @@ export function isPathInFolder(path: string, folder: string): boolean {
 }
 
 /** Extension regex for every document ZenReader imports & reads. */
-export const DOC_EXT = /\.(md|markdown|html|htm)$/i
+export const DOC_EXT = /\.(md|markdown|html|htm|pdf)$/i
 
 /** Title fallback: strip the `.md` / `.markdown` / `.html` / `.htm` suffix. */
 export function titleFromName(name: string): string {
-  return name.replace(/\.(md|markdown|html|htm)$/i, '')
+  return name.replace(DOC_EXT, '')
 }
 
 /** Is `path`/`name` a document ZenReader reads? */
@@ -58,12 +58,22 @@ export function isHtmlFile(name: string): boolean {
   return /\.(html|htm)$/i.test(name)
 }
 
+export function isPdfFile(name: string): boolean {
+  return /\.pdf$/i.test(name)
+}
+
 /**
  * Which reading family a file name belongs to. Callers pass names already
  * accepted by `isDocFile`; anything that isn't HTML is a markdown 卷.
  */
 export function docFormatOf(name: string): DocumentFormat {
-  return isHtmlFile(name) ? 'html' : 'markdown'
+  return isPdfFile(name) ? 'pdf' : isHtmlFile(name) ? 'html' : 'markdown'
+}
+
+/** PDF has its own reader; text formats share the existing route. */
+export function readerPath(relativePath: string): string {
+  const route = isPdfFile(relativePath) ? 'pdf' : 'read'
+  return `/${route}/${encodeURIComponent(relativePath)}`
 }
 
 /**

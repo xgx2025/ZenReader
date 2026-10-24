@@ -217,6 +217,7 @@ const FORMAT_FILTERS = [
   { key: 'all', label: COPY.formatFilterAll, mono: false, mark: 'text-bamboo' },
   { key: 'markdown', label: COPY.formatExtMarkdown, mono: true, mark: 'text-bamboo' },
   { key: 'html', label: COPY.formatExtHtml, mono: true, mark: 'text-sandal' },
+  { key: 'pdf', label: COPY.formatExtPdf, mono: true, mark: 'text-ink-soft' },
 ] as const
 
 const formatCurrent = computed(
@@ -231,6 +232,8 @@ const formatChipClass = computed(() => {
       return 'border-bamboo/25 bg-bamboo/10 text-bamboo'
     case 'html':
       return 'border-sandal/30 bg-sandal/12 text-sandal'
+    case 'pdf':
+      return 'border-dusk/30 bg-dusk/10 text-ink-soft'
     default:
       return 'border-transparent bg-paper-deep/60 text-ink-soft hover:bg-bamboo/10 hover:text-ink'
   }

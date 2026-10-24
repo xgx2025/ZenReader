@@ -53,6 +53,7 @@ fn is_supported_doc(path: &Path) -> bool {
                 || e.eq_ignore_ascii_case("markdown")
                 || e.eq_ignore_ascii_case("html")
                 || e.eq_ignore_ascii_case("htm")
+                || e.eq_ignore_ascii_case("pdf")
         }
         None => false,
     }
@@ -132,6 +133,59 @@ fn read_vault(dir: String) -> Result<VaultListing, String> {
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+/// Resolve a PDF under the selected vault. Canonicalization keeps symlinks
+/// from escaping the vault even if the book is moved between requests.
+fn pdf_in_vault(dir: &str, relative_path: &str) -> Result<std::path::PathBuf, String> {
+    check_relative("PDF", relative_path)?;
+    let root = Path::new(dir).canonicalize().map_err(|e| e.to_string())?;
+    let path = root
+        .join(relative_path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if !path.starts_with(&root)
+        || !path.is_file()
+        || !path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+    {
+        return Err("PDF 路径不在书库内".into());
+    }
+    Ok(path)
+}
+
+#[tauri::command]
+fn pdf_file_size(dir: String, relative_path: String) -> Result<u64, String> {
+    let path = pdf_in_vault(&dir, &relative_path)?;
+    std::fs::metadata(path)
+        .map(|m| m.len())
+        .map_err(|e| e.to_string())
+}
+
+/// PDF.js asks for byte ranges. Return base64 in bounded chunks to avoid
+/// sending large binary arrays through JSON IPC at once.
+#[tauri::command]
+fn read_pdf_range(
+    dir: String,
+    relative_path: String,
+    begin: u64,
+    end: u64,
+) -> Result<String, String> {
+    use base64::Engine as _;
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    let path = pdf_in_vault(&dir, &relative_path)?;
+    let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let size = file.metadata().map_err(|e| e.to_string())?.len();
+    if begin >= end || end > size || end - begin > 1024 * 1024 {
+        return Err("PDF 读取范围无效".into());
+    }
+    file.seek(SeekFrom::Start(begin))
+        .map_err(|e| e.to_string())?;
+    let mut bytes = vec![0; (end - begin) as usize];
+    file.read_exact(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 /// Sniff `charset=…` from the `<meta charset>` of an HTML document's head.
@@ -250,6 +304,28 @@ fn write_base64(path: String, data: String) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, bytes).map_err(|e| e.to_string())
+}
+
+/// Stream a browser-picked PDF to disk in bounded chunks instead of sending the
+/// whole binary through Tauri JSON IPC in one message.
+#[tauri::command]
+fn write_base64_chunk(path: String, data: String, append: bool) -> Result<(), String> {
+    use base64::Engine as _;
+    use std::io::Write as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| format!("坏 base64：{e}"))?;
+    if let Some(parent) = Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(append)
+        .truncate(!append)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    file.write_all(&bytes).map_err(|e| e.to_string())
 }
 
 /// Create a directory (and any missing parents) under the vault.
@@ -383,10 +459,8 @@ mod tests {
     /// 分组删除只允许空分组：含文件的目录拒绝且保留，空树整体删除。
     #[test]
     fn remove_folder_only_when_empty() {
-        let base = std::env::temp_dir().join(format!(
-            "zenreader-folder-test-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("zenreader-folder-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let root = base.join("vault");
         std::fs::create_dir_all(root.join("a/b")).unwrap(); // a 只含空子目录 b
@@ -414,10 +488,8 @@ mod tests {
     /// rename_dir：整棵子树随目录一起搬；三级拒绝都在动盘之前。
     #[test]
     fn rename_dir_moves_subtree_and_refuses_bad_moves() {
-        let base = std::env::temp_dir().join(format!(
-            "zenreader-rename-test-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("zenreader-rename-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let root = base.join("vault");
         std::fs::create_dir_all(root.join("Java/深水区")).unwrap();
@@ -448,12 +520,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
-    /// read_vault 列出 .md/.html/.htm，跳过其它扩展与点目录。
+    /// read_vault 列出支持的三种卷式，跳过其它扩展与点目录。
     #[test]
-    fn read_vault_lists_html_and_md() {        let base = std::env::temp_dir().join(format!(
-            "zenreader-vault-test-{}",
-            std::process::id()
-        ));
+    fn read_vault_lists_html_and_md() {
+        let base =
+            std::env::temp_dir().join(format!("zenreader-vault-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let root = base.join("vault");
         std::fs::create_dir_all(root.join("哲学/随笔")).unwrap();
@@ -461,6 +532,7 @@ mod tests {
         std::fs::write(root.join("a.md"), "# a").unwrap();
         std::fs::write(root.join("b.HTML"), "<b>b</b>").unwrap();
         std::fs::write(root.join("c.htm"), "<b>c</b>").unwrap();
+        std::fs::write(root.join("e.PDF"), b"%PDF-1.7").unwrap();
         std::fs::write(root.join("哲学/随笔/d.markdown"), "d").unwrap();
         std::fs::write(root.join("e.txt"), "skip").unwrap();
         std::fs::write(root.join("script.js"), "skip").unwrap();
@@ -469,7 +541,7 @@ mod tests {
         let listing = read_vault(root.to_string_lossy().into_owned()).unwrap();
         let mut names: Vec<&str> = listing.files.iter().map(|f| f.name.as_str()).collect();
         names.sort_unstable();
-        assert_eq!(names, ["a.md", "b.HTML", "c.htm", "d.markdown"]);
+        assert_eq!(names, ["a.md", "b.HTML", "c.htm", "d.markdown", "e.PDF"]);
         assert!(
             listing.dirs.iter().any(|d| d == "哲学/随笔"),
             "dirs should include the CJK folder, got {:?}",
@@ -480,6 +552,35 @@ mod tests {
             "hidden dirs excluded"
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn pdf_range_reads_only_inside_vault() {
+        let base = std::env::temp_dir().join(format!("zenreader-pdf-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let vault = base.join("vault");
+        std::fs::create_dir_all(&vault).unwrap();
+        std::fs::write(vault.join("book.PDF"), b"0123456789").unwrap();
+        std::fs::write(base.join("outside.pdf"), b"secret").unwrap();
+        let dir = vault.to_string_lossy().into_owned();
+        assert_eq!(pdf_file_size(dir.clone(), "book.PDF".into()).unwrap(), 10);
+        assert_eq!(
+            read_pdf_range(dir.clone(), "book.PDF".into(), 2, 5).unwrap(),
+            "MjM0"
+        );
+        assert!(read_pdf_range(dir.clone(), "book.PDF".into(), 0, 11).is_err());
+        assert!(pdf_file_size(dir, "../outside.pdf".into()).is_err());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn pdf_import_chunks_preserve_binary_bytes() {
+        let path = std::env::temp_dir().join(format!("zenreader-pdf-chunks-{}.pdf", std::process::id()));
+        let name = path.to_string_lossy().into_owned();
+        write_base64_chunk(name.clone(), "JVBERi0=".into(), false).unwrap();
+        write_base64_chunk(name, "AQID/w==".into(), true).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"%PDF-\x01\x02\x03\xff");
+        let _ = std::fs::remove_file(path);
     }
 
     /// decode_html_bytes 按 <meta charset> 解 GBK，UTF-8 与 BOM 皆可。
@@ -493,8 +594,7 @@ mod tests {
         );
 
         // GBK bytes with a gb2312 meta declaration.
-        let mut gbk: Vec<u8> =
-            b"<meta charset=\"gb2312\"><p>".to_vec();
+        let mut gbk: Vec<u8> = b"<meta charset=\"gb2312\"><p>".to_vec();
         let (enc, _, _) = encoding_rs::GBK.encode("你好，禅阅读");
         gbk.extend_from_slice(&enc);
         gbk.extend_from_slice(b"</p>");
@@ -503,7 +603,10 @@ mod tests {
 
         // Plain UTF-8 without declaration.
         let plain = b"<html><head></head><body>ok</body></html>";
-        assert_eq!(decode_html_bytes(plain).unwrap(), "<html><head></head><body>ok</body></html>");
+        assert_eq!(
+            decode_html_bytes(plain).unwrap(),
+            "<html><head></head><body>ok</body></html>"
+        );
     }
 
     /// sniff_meta_charset 认 charset=… 标签（单/双引号均可）。
@@ -513,7 +616,9 @@ mod tests {
         fn lower_name(e: &'static Encoding) -> String {
             e.name().to_ascii_lowercase()
         }
-        let gbk = sniff_meta_charset(b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=gbk\">");
+        let gbk = sniff_meta_charset(
+            b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=gbk\">",
+        );
         assert_eq!(gbk.map(lower_name), Some("gbk".to_string()));
         let utf8 = sniff_meta_charset(b"<meta charset='utf-8'>");
         assert_eq!(utf8.map(lower_name), Some("utf-8".to_string()));
@@ -538,11 +643,14 @@ pub fn run() {
             pick_folder,
             read_vault,
             read_file,
+            pdf_file_size,
+            read_pdf_range,
             read_html,
             set_active_vault,
             write_file,
             copy_file,
             write_base64,
+            write_base64_chunk,
             delete_file,
             create_dir,
             move_file,

@@ -6,9 +6,11 @@ import { deleteDocumentNotes, moveDocumentNotes, renameFolderNotes } from '@/lib
 import {
   docFormatOf,
   isHtmlFile,
+  isPdfFile,
   isPathInFolder,
   resolveHtmlTitle,
   resolveTitle,
+  titleFromName,
   rewritePathPrefix,
   vaultFile,
 } from '@/lib/vault'
@@ -402,6 +404,20 @@ export const useLibraryStore = defineStore('library', () => {
       // mtime 未变即内容未变，直接沿用已有索引。
       if (index.value[f.relativePath]?.mtime === f.mtime) continue
       try {
+        if (isPdfFile(f.name)) {
+          // PDF is binary. Library cards and title search need only its file
+          // name; parsing every page during a vault refresh would block the
+          // progressive index behind potentially huge scanned books.
+          index.value[f.relativePath] = {
+            title: titleFromName(f.name),
+            excerpt: '',
+            fullText: '',
+            wordCount: 0,
+            readingTime: 0,
+            mtime: f.mtime,
+          }
+          continue
+        }
         const isHtml = isHtmlFile(f.name)
         const source = isHtml
           ? await nativeFs.readHtml(f.path) // GBK/meta-charset 感知

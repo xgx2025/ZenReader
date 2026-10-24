@@ -24,6 +24,12 @@ const router = createRouter({
       component: () => import('@/views/ReaderView.vue'),
       props: true,
     },
+    {
+      path: '/pdf/:path',
+      name: 'pdf-reader',
+      component: () => import('@/views/PdfReaderView.vue'),
+      props: true,
+    },
   ],
 })
 

@@ -21,6 +21,7 @@
 
 use percent_encoding::percent_decode_str;
 use std::borrow::Cow;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
@@ -91,7 +92,11 @@ pub fn confine_vault_asset(vault_root: &Path, segments: &[String]) -> Result<Pat
 
 /// Content type by file extension (used by both the scheme and the media map).
 pub fn mime_for(path: &Path) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()) {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+    {
         Some(e) => match e.as_str() {
             "html" | "htm" => "text/html",
             "css" => "text/css",
@@ -149,8 +154,45 @@ fn not_found() -> tauri::http::Response<Cow<'static, [u8]>> {
         .unwrap_or_else(|_| tauri::http::Response::new(Cow::Borrowed(&b""[..])))
 }
 
+/// A single byte range is enough for PDF.js. Keep other assets on their old
+/// whole-file path; PDF files can be hundreds of megabytes.
+fn parse_byte_range(header: &str, len: u64) -> Option<(u64, u64)> {
+    if len == 0 || !header.starts_with("bytes=") {
+        return None;
+    }
+    let value = &header[6..];
+    if value.contains(',') {
+        return None;
+    }
+    let (start, end) = value.split_once('-')?;
+    if start.is_empty() {
+        let suffix: u64 = end.parse().ok()?;
+        if suffix == 0 {
+            return None;
+        }
+        return Some((len.saturating_sub(suffix), len - 1));
+    }
+    let start: u64 = start.parse().ok()?;
+    if start >= len {
+        return None;
+    }
+    let end: u64 = if end.is_empty() {
+        len - 1
+    } else {
+        end.parse().ok()?
+    };
+    if end < start {
+        return None;
+    }
+    Some((start, end.min(len - 1)))
+}
+
 /// Serve one `zenasset://` request. Pure of I/O and unit-testable shape.
-fn serve_asset(app: &tauri::AppHandle, path: &str) -> tauri::http::Response<Cow<'static, [u8]>> {
+fn serve_asset(
+    app: &tauri::AppHandle,
+    path: &str,
+    range: Option<&str>,
+) -> tauri::http::Response<Cow<'static, [u8]>> {
     let Ok(segments) = decode_asset_path(path) else {
         return not_found();
     };
@@ -160,14 +202,52 @@ fn serve_asset(app: &tauri::AppHandle, path: &str) -> tauri::http::Response<Cow<
     let Ok(target) = confine_vault_asset(&root, &segments) else {
         return not_found();
     };
-    let Ok(bytes) = std::fs::read(&target) else {
+    let Ok(mut file) = std::fs::File::open(&target) else {
         return not_found();
     };
+    let Ok(len) = file.metadata().map(|m| m.len()) else {
+        return not_found();
+    };
+    let is_pdf = mime_for(&target) == "application/pdf";
+    let requested_range = if is_pdf { range } else { None };
+    let selected = requested_range.and_then(|r| parse_byte_range(r, len));
+    if requested_range.is_some() && selected.is_none() {
+        return tauri::http::Response::builder()
+            .status(416)
+            .header("Content-Range", format!("bytes */{len}"))
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Expose-Headers", "Content-Range")
+            .body(Cow::Borrowed(&b""[..]))
+            .unwrap_or_else(|_| not_found());
+    }
+    let mut bytes = Vec::new();
+    if let Some((start, end)) = selected {
+        if file.seek(SeekFrom::Start(start)).is_err()
+            || file.take(end - start + 1).read_to_end(&mut bytes).is_err()
+        {
+            return not_found();
+        }
+    } else if file.read_to_end(&mut bytes).is_err() {
+        return not_found();
+    }
     let builder = tauri::http::Response::builder()
+        .status(if selected.is_some() { 206 } else { 200 })
         .header("Content-Type", mime_for(&target))
         // Opaque-origin (sandboxed srcdoc) fetch/fonts/module-scripts need CORS.
         .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Headers", "Range")
+        .header(
+            "Access-Control-Expose-Headers",
+            "Accept-Ranges, Content-Length, Content-Range",
+        )
+        .header("Accept-Ranges", if is_pdf { "bytes" } else { "none" })
+        .header("Content-Length", bytes.len().to_string())
         .header("Cache-Control", "no-cache");
+    let builder = if let Some((start, end)) = selected {
+        builder.header("Content-Range", format!("bytes {start}-{end}/{len}"))
+    } else {
+        builder
+    };
     builder
         .body(Cow::Owned(bytes))
         .unwrap_or_else(|_| not_found())
@@ -182,8 +262,13 @@ pub fn handle(
 ) {
     let app = ctx.app_handle().clone();
     let path = request.uri().path().to_string();
+    let range = request
+        .headers()
+        .get("range")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
     std::thread::spawn(move || {
-        responder.respond(serve_asset(&app, &path));
+        responder.respond(serve_asset(&app, &path, range.as_deref()));
     });
 }
 
@@ -206,7 +291,7 @@ mod tests {
             ".zenreader/notes.db",
             "a/.hidden",
             ".htaccess",
-            "%2e%2e/b", // `..` after decode → rejects in the decoded check
+            "%2e%2e/b",   // `..` after decode → rejects in the decoded check
             "a%2f..%2fb", // encoded slash would smuggle a separator into a segment
             "a\\b",
         ] {
@@ -269,7 +354,20 @@ mod tests {
         assert_eq!(mime_for(Path::new("a.js")), "text/javascript");
         assert_eq!(mime_for(Path::new("a.woff2")), "font/woff2");
         assert_eq!(mime_for(Path::new("a.svg")), "image/svg+xml");
-        assert_eq!(mime_for(Path::new("a.unknownext")), "application/octet-stream");
+        assert_eq!(
+            mime_for(Path::new("a.unknownext")),
+            "application/octet-stream"
+        );
+    }
+
+    #[test]
+    fn pdf_byte_ranges_are_bounded() {
+        assert_eq!(parse_byte_range("bytes=0-99", 1000), Some((0, 99)));
+        assert_eq!(parse_byte_range("bytes=900-", 1000), Some((900, 999)));
+        assert_eq!(parse_byte_range("bytes=-20", 1000), Some((980, 999)));
+        assert_eq!(parse_byte_range("bytes=900-2000", 1000), Some((900, 999)));
+        assert_eq!(parse_byte_range("bytes=1000-", 1000), None);
+        assert_eq!(parse_byte_range("bytes=0-9,20-29", 1000), None);
     }
 
     #[test]

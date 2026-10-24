@@ -192,6 +192,15 @@
         })
       }
     })
+    // Optional PDF card for format-filter and visual regression screenshots.
+    if (location.search.indexOf('pdf=1') !== -1) {
+      files.push({
+        name: 'PDF 示例.pdf',
+        path: settings.vaultPath + '\\资料\\PDF 示例.pdf',
+        relativePath: '资料/PDF 示例.pdf',
+        mtime: now + 3600000,
+      })
+    }
     return { files: files, dirs: folders.map(function (f) { return f[0] }) }
   }
 

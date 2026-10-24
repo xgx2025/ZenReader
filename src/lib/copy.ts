@@ -57,8 +57,10 @@ export const COPY = {
   // 卡片格式标识：页脚等宽小签，只留扩展名本身，不缀前导点
   formatExtMarkdown: 'md',
   formatExtHtml: 'html',
+  formatExtPdf: 'pdf',
   formatMdHint: 'Markdown 原稿 · 由禅阅读排版成卷',
   formatHtmlHint: 'HTML 原样式直读 · 保留原有版式与色彩',
+  formatPdfHint: 'PDF 原版式阅读',
 
   // 书库卷式筛选（列表页工具栏那枚折叠小签）
   formatFilter: '卷式',
@@ -79,9 +81,9 @@ export const COPY = {
   readingProgress: '读到',
   finished: '已读毕',
 
-  importDropHint: '引卷于此 —— 拖入 .md / .html 文件',
+  importDropHint: '引卷于此 —— 拖入 .md / .html / .pdf 文件',
   /** 引卷落区副行：可引的卷式。书库与引卷页两处落区共用，勿各写各的。 */
-  importExtHint: '.md · .html',
+  importExtHint: '.md · .html · .pdf',
   importFileAction: '引卷（选择文件）',
   importFolderAction: '拾整卷（选择文件夹）',
   importDone: '已引入',

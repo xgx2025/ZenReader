@@ -16,13 +16,13 @@ export const GUIDE_ORDER: GuideId[] = ['vault', 'import', 'note', 'folder-create
 
 export const GUIDES: Record<GuideId, { title: string; steps: GuideStep[] }> = {
   vault: { title: '打开书库', steps: [
-    { route: '/', target: '[data-guide="open-vault"]', title: '先打开一座书库', body: '选择一个本地文件夹。已有 .md / .html 文章可直接读取；也可以选空文件夹，再用「引卷」加入文章。', event: 'vault-opened' },
+    { route: '/', target: '[data-guide="open-vault"]', title: '先打开一座书库', body: '选择一个本地文件夹。已有 .md / .html / .pdf 文件可直接读取；也可以选空文件夹，再用「引卷」加入文章。', event: 'vault-opened' },
     { route: '/', target: '[data-guide="library-main"]', title: '书库已打开', body: '这里显示文件夹里的文章。已有文章可直接开卷；空书库请点「引卷（导入文件）」。', nextLabel: '明白了' },
   ] },
   import: { title: '引卷入库', steps: [
     { route: '/', target: '[data-guide="import-link"]', title: '引入第一篇文章', body: '点击「引卷」，把外部文章加入当前书库。已有文档的文件夹也可以直接作为书库打开。', event: 'import-page' },
     { route: '/import', target: '[data-guide="import-target"]', title: '先确认落点', body: '「引入到」决定文章放在哪个分组。不需要分类就保留「根目录」。', nextLabel: '落点已确认' },
-    { route: '/import', target: '[data-guide="import-actions"]', title: '选择文章', body: '单篇选「引卷」，整批选「拾整卷」；也可拖入 .md / .html 文件。导入成功后会显示结果。', event: 'imported' },
+    { route: '/import', target: '[data-guide="import-actions"]', title: '选择文章', body: '单篇选「引卷」，整批选「拾整卷」；也可拖入 .md / .html / .pdf 文件。导入成功后会显示结果。', event: 'imported' },
     { route: '/import', target: '[data-guide="import-result"]', title: '确认引卷结果', body: '「已引入」大于 0 才算成功；「已略过」与错误可在本页查看。回书库即可开卷阅读。', nextLabel: '完成' },
   ] },
   note: { title: '划词写觉悟', steps: [
