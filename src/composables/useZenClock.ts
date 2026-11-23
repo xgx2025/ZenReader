@@ -1,11 +1,11 @@
 import { computed, ref, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
 
 import { isTauri } from '@/lib/native'
 import { useSettingsStore } from '@/stores/settings'
 import { COPY } from '@/lib/copy'
 import { playIncenseChime, prepareChime } from '@/lib/chime'
-import { hideToTray, setupTray, syncTray } from '@/lib/trayClock'
 import type { ReminderAction } from '@/types/settings'
 
 /**
@@ -143,17 +143,19 @@ function tick() {
   if (elapsedMs.value >= intervalMs()) fire()
 }
 
-/** 挂载（应用启动）：启动计时循环、立托盘、挂关窗钩子——仅此一次。
+/** 页面挂载时启动计时循环，连接原生托盘并挂关窗钩子。
  *  注意：模块顶层不得触碰 store——本模块经 App.vue 被顶层 import，
  *  求值早于 main.ts 安装 Pinia，任何 eager 读取都会让整个应用白屏。 */
 function start() {
   if (mounted || !isTauri()) return
   mounted = true
   tickTimer = setInterval(tick, TICK_MS)
+  const win = getCurrentWindow()
+  void win.listen('zen-clock-toggle', () => (lit.value ? extinguish() : ignite()))
 
   // 任务栏进度 + 托盘提示镜像（仅桌面端）：香燃则一线随行、悬停可读，香熄即撤。
   watch([lit, progress, remainingText], () => {
-    getCurrentWindow()
+    win
       .setProgressBar(
         lit.value
           ? { status: ProgressBarStatus.Normal, progress: Math.round(progress.value * 100) }
@@ -162,23 +164,17 @@ function start() {
       .catch(() => {
         /* 平台不支持或无权限——静默作罢 */
       })
-    void syncTray()
-  })
-
-  void setupTray({
-    isLit: () => lit.value,
-    tooltip: () =>
-      lit.value
-        ? `${COPY.appName} · ${remainingText.value}`
-        : `${COPY.appName} · ${COPY.trayIdle}`,
-    onToggle: () => (lit.value ? extinguish() : ignite()),
-  })
+    void invoke('sync_clock_tray', {
+      lit: lit.value,
+      tooltip: `${COPY.appName} · ${lit.value ? remainingText.value : COPY.trayIdle}`,
+    }).catch(() => { /* 系统托盘不可用时仍可在阅读页计时。 */ })
+  }, { immediate: true })
 
   // 燃香时关窗不退出，缩入托盘续烧；退出走托盘「退出」。
-  void getCurrentWindow().onCloseRequested((e) => {
+  void win.onCloseRequested((e) => {
     if (!lit.value) return
     e.preventDefault()
-    void hideToTray()
+    void win.hide()
   })
 }
 

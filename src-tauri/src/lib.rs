@@ -6,6 +6,7 @@ use std::time::UNIX_EPOCH;
 use tauri::Manager;
 
 mod asset_protocol;
+mod clock_tray;
 mod knowledge;
 mod notes;
 
@@ -629,10 +630,38 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 正文也可能在独立的 HTML 帧内。只取消浏览器默认菜单，书库组件仍可响应右键。
+        .plugin(
+            tauri::plugin::Builder::<_, ()>::new("context-menu")
+                .js_init_script_on_all_frames(
+                    "window.addEventListener('contextmenu', event => event.preventDefault(), true);",
+                )
+                .build(),
+        )
         // 外链经系统默认浏览器打开，WebView 永不离开应用。
         .plugin(tauri_plugin_opener::init())
         // 香尽的系统通知：人在别的窗口/页面时也接得住。
         .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.with_webview(|webview| {
+                    // 在 WebView 的 UI 线程设置浏览器原生菜单，覆盖正文及其子帧。
+                    let result = unsafe {
+                        webview.controller().CoreWebView2()
+                            .and_then(|view| view.Settings())
+                            .and_then(|settings| settings.SetAreDefaultContextMenusEnabled(false))
+                    };
+                    if let Err(error) = result {
+                        eprintln!("[zenreader] failed to disable WebView2 context menus: {error}");
+                    }
+                })?;
+            }
+            if let Err(error) = clock_tray::setup(app) {
+                eprintln!("[zenreader] tray init failed: {error}");
+            }
+            Ok(())
+        })
         .manage(ActiveVault(Mutex::new(None)))
         // HTML 原样式直读的本地资产服务：只读、收敛于活跃书库根。
         // 由前端经 set_active_vault 上报根，响应带 ACAO:*（不透明源 fetch/字体需要）。
@@ -640,6 +669,7 @@ pub fn run() {
             asset_protocol::handle(ctx, request, responder)
         })
         .invoke_handler(tauri::generate_handler![
+            clock_tray::sync_clock_tray,
             pick_folder,
             read_vault,
             read_file,
